@@ -123,7 +123,6 @@ public class RestoreDbTask {
         // InvariantDeviceProfile won't switch to new grid when initializing.
         InvariantDeviceProfile idp = InvariantDeviceProfile.INSTANCE.get(context);
 
-        // Only clear pending after successful restoration.
         LauncherPrefs.get(context).removeSyncChecked(RESTORE_DEVICE, RESTORE_USER_INITIATED);
 
         DeviceGridState deviceGridState = new DeviceGridState(context);

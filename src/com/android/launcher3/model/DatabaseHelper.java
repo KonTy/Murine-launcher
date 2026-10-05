@@ -132,7 +132,6 @@ public class DatabaseHelper extends NoLocaleSQLiteHelper implements
     public void onOpen(SQLiteDatabase db) {
         super.onOpen(db);
         if (!LauncherDbUtils.tableExists(db, Favorites.TABLE_NAME)) {
-            // ModelDbController distinguishes interrupted empty creation from a damaged layout.
             return;
         }
 

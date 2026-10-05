@@ -54,8 +54,6 @@ public class LauncherApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        // The legacy wallpaper extraction service has its own process and must not open the
-        // launcher's preferences/databases or attempt to recover the main process's transaction.
         if (!mIsMainProcess) return;
         app.murinelauncher.backup.BackupHelper.INSTANCE.showRestoreFailureIfNeeded(this);
         app.murinelauncher.icons.IconPackProgress.install(this);

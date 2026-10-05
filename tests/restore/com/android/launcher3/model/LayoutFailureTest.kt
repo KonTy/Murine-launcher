@@ -145,13 +145,13 @@ class LayoutFailureTest {
         }
     }
 
-    @Test fun schemaUpgradeFailureRollsBackInsteadOfRecreatingFavorites() {
+    @Test fun duplicateWidgetProviderColumnRollsBackUpgradeWithoutRecreatingFavorites() {
         val file = context.getDatabasePath("failed-upgrade.db")
         file.parentFile!!.mkdirs()
         SQLiteDatabase.openOrCreateDatabase(file, null).use { db ->
             LauncherSettings.Favorites.addTableToDb(db, 0, false)
             favorites(db)
-            db.version = 13 // appWidgetProvider already exists: real onUpgrade must fail.
+            db.version = 13
         }
         val before = file.readBytes()
         helper(file.name).use { helper ->
@@ -215,7 +215,6 @@ class LayoutFailureTest {
                     LauncherDbUtils.SQLiteTransaction(targetDb).use {
                         tables.copy("favorites", "favorites")
                         targetDb.execSQL("DELETE FROM favorites")
-                        // Deliberately don't commit, as for placement/insert/I/O failure.
                     }
                 }
                 assertEquals(3, count(targetDb))
@@ -248,7 +247,6 @@ class LayoutFailureTest {
                 val dest = DeviceGridState(4, 5, 4, 0, "target.db", 0)
                 src.writeToPrefsSync(context)
                 val delegate = mock(ModelDelegate::class.java)
-                // The real copy fails after dropping/recreating the destination table.
                 source.writableDatabase.execSQL("ALTER TABLE favorites RENAME TO original")
                 assertThrows(Exception::class.java) {
                     GridSizeMigrationLogic().migrateGrid(context, src, dest, target,

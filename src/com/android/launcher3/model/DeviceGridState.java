@@ -119,7 +119,6 @@ public class DeviceGridState implements Comparable<DeviceGridState> {
                 GRID_TYPE.to(mGridType));
     }
 
-    /** Publishes migration metadata only after the database transaction has committed. */
     @androidx.annotation.WorkerThread
     public void writeToPrefsSync(Context context) {
         LauncherPrefs.get(context).putSyncChecked(

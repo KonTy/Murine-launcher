@@ -8,11 +8,6 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 
-/**
- * A restart-only file transaction. Call before opening any of the managed files.
- * Originals remain beside their targets (including SQLite journals and preference .bak files)
- * until the restored workspace has loaded. Recovery never consumes its rollback source.
- */
 internal class RestoreJournal(
     private val directory: File,
     private val targets: List<File>,
@@ -20,7 +15,7 @@ internal class RestoreJournal(
     private val move: (File, File) -> Unit,
 ) {
     private val state = File(directory, "state")
-    private fun old(file: File) = File(file.path + ".restore-old")
+    private fun preservedOriginal(file: File) = File(file.path + ".restore-old")
 
     fun exists() = state.exists()
     fun phase() = state.readText()
@@ -43,7 +38,7 @@ internal class RestoreJournal(
         }
     }
 
-    private fun copy(source: File, target: File) {
+    private fun copyAndSync(source: File, target: File) {
         ensureParent(target)
         val temp = File(target.path + ".restore-new")
         FileOutputStream(temp).use { output ->
@@ -61,12 +56,10 @@ internal class RestoreJournal(
         }
     }
 
-    /** The supplied map contains replacements; omitted targets are removed. */
     fun install(replacements: Map<File, File>) {
         check(!exists())
-        check(targets.none { old(it).exists() })
+        check(targets.none { preservedOriginal(it).exists() })
         check(replacements.keys.all { it in targets })
-        // Persist the presence map before the first rename, including originally absent files.
         write(File(directory, "present"), targets.joinToString("\n") {
             if (it.exists()) "1" else "0"
         }.toByteArray())
@@ -75,27 +68,27 @@ internal class RestoreJournal(
         targets.forEach { target ->
             if (target.exists()) {
                 FileOutputStream(target, true).use { it.fd.sync() }
-                move(target, old(target))
+                move(target, preservedOriginal(target))
                 syncDirectory(requireNotNull(target.parentFile))
             }
         }
         transition("installing")
-        replacements.forEach { (target, source) -> copy(source, target) }
+        replacements.forEach { (target, source) -> copyAndSync(source, target) }
         transition("loading")
     }
 
-    /** Idempotent even if recovery itself is interrupted. No SharedPreferences/SQLite handles. */
     fun rollback() {
         val phase = phase()
         check(phase in listOf("saving", "installing", "loading", "rolled-back"))
         if (phase == "rolled-back") return
-        val present = File(directory, "present").readLines()
-        check(present.size == targets.size && present.all { it == "0" || it == "1" })
+        val originallyPresent = File(directory, "present").readLines()
+        check(originallyPresent.size == targets.size
+                && originallyPresent.all { it == "0" || it == "1" })
         targets.forEachIndexed { index, target ->
-            val saved = old(target)
+            val saved = preservedOriginal(target)
             if (saved.exists()) {
-                copy(saved, target)
-            } else if (present[index] == "0") {
+                copyAndSync(saved, target)
+            } else if (originallyPresent[index] == "0") {
                 delete(target)
             } else if (phase != "saving" || !target.exists()) {
                 throw IOException("Restore rollback source is missing")
@@ -109,11 +102,10 @@ internal class RestoreJournal(
         transition("committed")
     }
 
-    /** Only terminal transactions may discard their originals. Safe to retry after a restart. */
     fun cleanup() {
         check(phase() in listOf("committed", "rolled-back"))
         targets.forEach {
-            delete(old(it))
+            delete(preservedOriginal(it))
             delete(File(it.path + ".restore-new"))
         }
     }

@@ -55,10 +55,7 @@ class RestoreReliabilityTest {
         ShadowLog.stream = System.out
     }
 
-    /**
-     * ShadowLinux uses RandomAccessFile, which cannot open directories. Bridge only directory
-     * descriptors to real host FileChannels, preserving real fsync and all other Android Os calls.
-     */
+    // ShadowLinux cannot open directories for fsync.
     @Implements(Os::class)
     class DirectoryOsShadow {
         companion object {
@@ -246,7 +243,6 @@ class RestoreReliabilityTest {
     }
 
     @Test fun failureAtEveryMoveAndDirectorySyncRestoresExactOriginals() {
-        // Includes the intent-to-save marker, every old/new file rename and terminal load marker.
         for (failure in 1..24) {
             val root = temporary.newFolder()
             val staging = File(root, "staging").apply { mkdir() }
@@ -269,7 +265,6 @@ class RestoreReliabilityTest {
             val restarted = RestoreJournal(staging, targets, {}, ::move)
             if (restarted.exists()) {
                 restarted.rollback()
-                // Retrying recovery must not consume the preserved files.
                 restarted.rollback()
                 restarted.cleanup()
             }
@@ -285,7 +280,6 @@ class RestoreReliabilityTest {
         val staging = File(root, "staging").apply { mkdir() }
         val dbFile = File(root, "launcher.db")
         database(dbFile)
-        // Retain a committed WAL as produced by a process exiting without checkpointing it.
         val db = SQLiteDatabase.openDatabase(dbFile.path, null, 0)
         db.enableWriteAheadLogging()
         db.rawQuery("PRAGMA wal_autocheckpoint=0", null).use { it.moveToFirst() }
@@ -371,7 +365,6 @@ class RestoreReliabilityTest {
         assertFalse(boot.exists())
         assertEquals("launcher.db",
             BackupValidation.readPreferences(prefs)[DeviceGridState.KEY_DB_FILE])
-        // A process that died or failed before workspace commit must roll back, not reapply.
         BackupHelper.applyStagedRestoreIfNeeded(context)
         assertFalse(BackupHelper.isRestoreActive())
         assertFalse(BackupHelper.isRestoreBlocked())
@@ -432,7 +425,6 @@ class RestoreReliabilityTest {
         database(live)
         val original = live.readBytes()
         val archive = temporary.newFile().apply { writeText("not an archive") }
-        // Initialize per-process state as Application.attachBaseContext does.
         BackupHelper.applyStagedRestoreIfNeeded(context)
         assertFalse(BackupHelper.stageRestore(context, Uri.fromFile(archive)))
         assertArrayEquals(original, live.readBytes())

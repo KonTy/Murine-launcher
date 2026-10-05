@@ -344,9 +344,6 @@ public class ModelDbController {
         return false;
     }
 
-    /**
-     * Migrates the DB, preserving the source and propagating failures to the loader.
-     */
     public void attemptMigrateDb(LauncherRestoreEventLogger restoreEventLogger,
             ModelDelegate modelDelegate) throws Exception {
         createDbIfNotExists();
@@ -396,9 +393,6 @@ public class ModelDbController {
         }
     }
 
-    /**
-     * Compatibility entry point using the same failure-preserving migration.
-     */
     public void tryMigrateDB(@Nullable LauncherRestoreEventLogger restoreEventLogger,
             ModelDelegate modelDelegate) {
         try {

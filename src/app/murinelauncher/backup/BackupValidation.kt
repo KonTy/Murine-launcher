@@ -17,7 +17,6 @@ import java.io.InputStream
 import java.util.zip.CRC32
 import java.util.zip.ZipFile
 
-/** Strict readers for untrusted backups; never use SharedPreferences' empty-map error fallback. */
 internal object BackupValidation {
     const val MAX_BYTES = 128L * 1024 * 1024
     private const val MAX_ENTRIES = 64
@@ -203,7 +202,6 @@ internal object BackupValidation {
     }
 
     private fun validateDatabase(file: File) {
-        // A custom handler prevents SQLite's default corruption handler from deleting the input.
         SQLiteDatabase.openDatabase(file.path, null,
             SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
             { throw IOException("Corrupt backup database") }).use { db ->

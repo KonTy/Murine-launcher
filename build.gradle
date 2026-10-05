@@ -13,8 +13,7 @@ plugins {
     alias(libs.plugins.google.ksp)
 }
 
-// Refine invalidates signed Conscrypt/Bouncy Castle bytecode used by Robolectric. Restore
-// their original resolved JARs only on host-test classpaths, leaving APK instrumentation intact.
+// Refine breaks the signatures on host-test crypto JARs.
 androidComponents {
     onVariants(selector().all()) { variant ->
         if (variant.unitTest != null) {

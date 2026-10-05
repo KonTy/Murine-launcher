@@ -125,7 +125,6 @@ object LauncherDbUtils {
         }
     }
 
-    /** Attach before beginning the destination transaction and detach after it closes. */
     class TableCopy(
         private val source: SQLiteDatabase,
         private val target: SQLiteDatabase,

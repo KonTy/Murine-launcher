@@ -113,7 +113,7 @@ object BackupHelper {
             "A restore is already pending"
         }
         val tmp = tmpStagingDir(context)
-        removeTree(tmp)
+        deleteStagingWithStateLast(tmp)
         check(tmp.mkdirs()) { "Cannot create restore staging directory" }
         val archive = File(tmp, "archive")
         var zip = false
@@ -148,9 +148,6 @@ object BackupHelper {
         false
     }
 
-    /**
-     * Runs in Application.attachBaseContext, before providers, preferences or databases open.
-     */
     fun applyStagedRestoreIfNeeded(context: Context) {
         restoreActive = false
         restoreBlocked = false
@@ -165,7 +162,7 @@ object BackupHelper {
                     restoreFailed = true
                 }
                 journal.cleanup()
-                removeTree(staging)
+                deleteStagingWithStateLast(staging)
             } catch (e: Exception) {
                 restoreFailed = true
                 restoreBlocked = !isTerminal(journal)
@@ -179,7 +176,6 @@ object BackupHelper {
             main.keys.removeAll { it.startsWith("EMPTY_DATABASE_CREATED") }
             main[RestoreDbTask.RESTORED_DEVICE_TYPE] =
                 main[DeviceGridState.KEY_DEVICE_TYPE] ?: 0
-            // Widget-ID remaps are platform restore metadata, not portable local backup data.
             main.remove(RestoreDbTask.APPWIDGET_IDS)
             main.remove(RestoreDbTask.APPWIDGET_OLD_IDS)
             val preparedMain = File(staging, "prepared-main")
@@ -208,8 +204,6 @@ object BackupHelper {
             }
             replacements[prefsFile(context, LauncherFiles.SHARED_PREFERENCES_KEY)] = preparedMain
             replacements[deviceFile] = preparedDevice
-            // DatabaseHelper regenerates the schema from this build's trusted resource. Never
-            // install executable downgrade SQL supplied by an untrusted archive.
             journal.install(replacements)
             restoreActive = true
         } catch (e: Exception) {
@@ -220,10 +214,8 @@ object BackupHelper {
                     journal.rollback()
                     journal.cleanup()
                 }
-                removeTree(staging)
+                deleteStagingWithStateLast(staging)
             } catch (rollback: Exception) {
-                // Keep both sources and leave settings/home selection accessible. Never open
-                // a partially installed database, seed defaults, or delete widget bindings.
                 restoreBlocked = journal.exists() && !isTerminal(journal)
                 Log.e(TAG, "Restore recovery blocked (${rollback.javaClass.simpleName})")
             }
@@ -236,7 +228,6 @@ object BackupHelper {
         false
     }
 
-    /** Called only after restore, migration and workspace loading have all succeeded. */
     @JvmStatic fun commitRestore(context: Context) {
         if (!restoreActive) return
         check(!restoreBlocked) { "Restore recovery is required" }
@@ -266,10 +257,9 @@ object BackupHelper {
         }
         journal(context).commit()
         restoreActive = false
-        // A terminal journal can be cleaned on the next start if cleanup runs out of space/I/O.
         try {
             journal(context).cleanup()
-            removeTree(stagingDir(context))
+            deleteStagingWithStateLast(stagingDir(context))
         } catch (e: Exception) {
             Log.w(TAG, "Restore cleanup deferred (${e.javaClass.simpleName})")
         }
@@ -279,8 +269,6 @@ object BackupHelper {
         showFailure(context)
         if (!restoreActive || restoreBlocked) return
         restoreBlocked = true
-        // Rollback is deliberately restart-only: the current process owns cached preferences
-        // and open SQLite connections. The durable loading journal triggers it next launch.
         com.android.launcher3.Utilities.restart()
     }
 
@@ -327,12 +315,10 @@ object BackupHelper {
         try { Os.fsync(fd) } finally { Os.close(fd) }
     }
 
-    private fun removeTree(directory: File) {
+    private fun deleteStagingWithStateLast(directory: File) {
         if (!directory.exists()) return
-        // Keep a terminal journal until all other staging files have been removed, so a failed
-        // cleanup can never turn a completed transaction back into a pending restore.
         directory.listFiles()?.sortedBy { it.name == "state" }?.forEach {
-            if (it.isDirectory) removeTree(it)
+            if (it.isDirectory) deleteStagingWithStateLast(it)
             else {
                 if (!it.delete()) throw IOException("Cannot clean restore staging")
                 syncDirectory(directory)
