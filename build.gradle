@@ -376,6 +376,9 @@ dependencies {
     implementation project(':compatLib:compatLibVBaklava')
 
     implementation project(':systemUIPluginCore')
+
+    // Offline speech-to-text for voice search (whisper.cpp built from source, see modules/voicelib)
+    implementation project(':voicelib')
 }
 
 dependencies {

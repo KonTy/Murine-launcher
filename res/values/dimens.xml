@@ -590,4 +590,6 @@
     <dimen name="murine_search_provider_icon_size" tools:ignore="ReferenceType">@fraction/_017sdp</dimen>
     <dimen name="murine_search_bar_icons_size" tools:ignore="ReferenceType">@fraction/_017sdp</dimen>
     <dimen name="murine_search_text_size">14sp</dimen>
+    <!-- Text inset at the end of the search box field, clear of the microphone -->
+    <dimen name="murine_search_voice_inset">48dp</dimen>
 </resources>
