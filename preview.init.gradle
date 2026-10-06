@@ -1,0 +1,12 @@
+allprojects {
+    pluginManager.withPlugin('com.android.application') {
+        android {
+            buildTypes {
+                release {
+                    applicationIdSuffix '.preview'
+                    signingConfig signingConfigs.debug
+                }
+            }
+        }
+    }
+}
