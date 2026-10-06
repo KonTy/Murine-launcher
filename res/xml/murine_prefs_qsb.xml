@@ -48,7 +48,7 @@
             android:title="@string/pref_qsb_hide_google_buttons_title"
             android:summary="@string/pref_qsb_hide_google_buttons_summary"
             android:disableDependentsState="true"
-            android:defaultValue="false" />
+            android:defaultValue="true" />
         <SwitchPreferenceCompat
             android:key="qsb_enable_lens"
             android:dependency="qsb_hide_google_buttons"

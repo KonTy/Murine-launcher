@@ -322,7 +322,7 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
             defaultGridHeight(isTablet)
         }
         @JvmField
-        val DOCK_GAP_CUSTOM = backedUpItem(SettingsHomeFragment.DOCK_GAP_CUSTOM, false)
+        val DOCK_GAP_CUSTOM = backedUpItem(SettingsHomeFragment.DOCK_GAP_CUSTOM, true)
         @JvmField
         val DOCK_GAP = backedUpItem(SettingsHomeFragment.DOCK_GAP, 5)
         @JvmField
@@ -428,7 +428,7 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
         @JvmField
         val QSB_SHOW_LENS = backedUpItem(SettingsQsbFragment.SHOW_LENS, true)
         @JvmField
-        val QSB_HIDE_GOOGLE_BUTTONS = backedUpItem(SettingsQsbFragment.HIDE_GOOGLE_BUTTONS, false)
+        val QSB_HIDE_GOOGLE_BUTTONS = backedUpItem(SettingsQsbFragment.HIDE_GOOGLE_BUTTONS, true)
         @JvmField
         val QSB_SEARCH_PROVIDER = backedUpItem(SettingsQsbFragment.SEARCH_PROVIDER, SearchProvider.DUCKDUCKGO, EncryptionType.ENCRYPTED)
         @JvmField

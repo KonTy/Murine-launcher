@@ -83,7 +83,7 @@
             android:key="pref_dock_gap_custom"
             android:title="@string/pref_dock_gap_custom_title"
             android:summary="@string/pref_dock_gap_custom_summary"
-            android:defaultValue="false" />
+            android:defaultValue="true" />
 
         <app.murinelauncher.widget.CustomSeekBarPreference
             android:key="pref_dock_gap"
