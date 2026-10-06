@@ -78,6 +78,21 @@
                 app:showTicks="true">
             </app.murinelauncher.widget.CustomSeekBarPreference>
         </com.android.settingslib.widget.ExpandablePreference>
+
+        <SwitchPreferenceCompat
+            android:key="pref_dock_gap_custom"
+            android:title="@string/pref_dock_gap_custom_title"
+            android:summary="@string/pref_dock_gap_custom_summary"
+            android:defaultValue="false" />
+
+        <app.murinelauncher.widget.CustomSeekBarPreference
+            android:key="pref_dock_gap"
+            android:dependency="pref_dock_gap_custom"
+            android:title="@string/pref_dock_gap_title"
+            android:defaultValue="5"
+            android:min="0"
+            android:max="120"
+            app:units="px" />
     </PreferenceCategory>
 
     <PreferenceCategory android:title="@string/pref_subcategory_gestures">

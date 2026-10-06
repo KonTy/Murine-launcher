@@ -183,6 +183,8 @@ public class DeviceProfile {
     private final LabelVisibility mLabelVisibility;
     private final float mDrawerPaddingScale;
     private final boolean mHideWorkspaceLabels; // True when labels must be hidden
+    private final boolean mCustomDockGap;
+    private final int mDockGapPx;
     public int iconDrawablePaddingPx;
     private int mIconDrawablePaddingOriginalPx;
     public boolean iconCenterVertically;
@@ -395,6 +397,8 @@ public class DeviceProfile {
         mLabelVisibility = LabelVisibility.AUTO;
         mDrawerPaddingScale = 1f;
         mHideWorkspaceLabels = false;
+        mCustomDockGap = false;
+        mDockGapPx = 0;
     }
 
     /** TODO: Once we fully migrate to staged split, remove "isMultiWindowMode" */
@@ -431,6 +435,8 @@ public class DeviceProfile {
         mDrawerPaddingScale = LauncherPrefs.get(context).get(LauncherPrefs.DRAWER_PADDING) / 100f;
         mHideWorkspaceLabels = mLabelVisibility == LabelVisibility.NEVER
                 || mLabelVisibility == LabelVisibility.NEVER_FULL;
+        mCustomDockGap = LauncherPrefs.get(context).get(LauncherPrefs.DOCK_GAP_CUSTOM);
+        mDockGapPx = LauncherPrefs.get(context).get(LauncherPrefs.DOCK_GAP);
         // Determine device posture.
         mInfo = info;
         isTablet = info.isTablet(windowBounds);
@@ -1908,6 +1914,10 @@ public class DeviceProfile {
                 paddingBottom +=
                         workspacePageIndicatorHeight - mWorkspacePageIndicatorOverlapWorkspace;
             }
+            if (alignsWorkspaceToDock()) {
+                paddingBottom = hotseatBarSizePx - mInsets.bottom - cellLayoutPaddingPx.bottom
+                        + mDockGapPx - dockIconTopInsetPx();
+            }
             int paddingTop = workspaceTopPadding + (mIsScalableGrid ? 0 : edgeMarginPx);
             int paddingLeft = desiredWorkspaceHorizontalMarginPx;
             int paddingRight = desiredWorkspaceHorizontalMarginPx;
@@ -2126,6 +2136,16 @@ public class DeviceProfile {
      */
     private int getIconVisibleSizePx(int iconSizePx) {
         return Math.round(ICON_VISIBLE_AREA_FACTOR * iconSizePx);
+    }
+
+    public boolean alignsWorkspaceToDock() {
+        return mCustomDockGap && !mIsResponsiveGrid && !mIsScalableGrid && !isVerticalBarLayout();
+    }
+
+    private int dockIconTopInsetPx() {
+        int iconTopInCell = (getIconSizeWithOverlap(iconSizePx) - iconSizePx) / 2;
+        int transparentIconEdge = (iconSizePx - getIconVisibleSizePx(iconSizePx)) / 2;
+        return iconTopInCell + transparentIconEdge;
     }
 
     private int getAdditionalQsbSpace() {

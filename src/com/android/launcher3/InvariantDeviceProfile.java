@@ -25,6 +25,8 @@ import static com.android.launcher3.LauncherPrefs.GRID_HEIGHT;
 import static com.android.launcher3.LauncherPrefs.GRID_NAME;
 import static com.android.launcher3.LauncherPrefs.GRID_WIDTH;
 import static com.android.launcher3.LauncherPrefs.DRAWER_GRID_WIDTH_OVERRIDE;
+import static com.android.launcher3.LauncherPrefs.DOCK_GAP;
+import static com.android.launcher3.LauncherPrefs.DOCK_GAP_CUSTOM;
 import static com.android.launcher3.LauncherPrefs.DRAWER_PADDING;
 import static com.android.launcher3.LauncherPrefs.ICON_LABEL_SIZE;
 import static com.android.launcher3.LauncherPrefs.LABEL_VISIBILITY;
@@ -313,17 +315,19 @@ public class InvariantDeviceProfile {
                     ICON_SIZE.getSharedPrefKey().equals(key) ||
                     ICON_LABEL_SIZE.getSharedPrefKey().equals(key) ||
                     LABEL_VISIBILITY.getSharedPrefKey().equals(key) ||
-                    QSB_SHOW_SEARCH_BAR.getSharedPrefKey().equals(key)) {
+                    QSB_SHOW_SEARCH_BAR.getSharedPrefKey().equals(key) ||
+                    DOCK_GAP_CUSTOM.getSharedPrefKey().equals(key) ||
+                    DOCK_GAP.getSharedPrefKey().equals(key)) {
                 onConfigChanged(context);
             }
         };
         prefs.addListener(prefListener, FIXED_LANDSCAPE_MODE, ENABLE_TWOLINE_ALLAPPS_TOGGLE,
                 GRID_WIDTH, GRID_HEIGHT, DRAWER_GRID_WIDTH_OVERRIDE, ICON_SIZE, ICON_LABEL_SIZE,
-                LABEL_VISIBILITY, DRAWER_PADDING);
+                LABEL_VISIBILITY, DRAWER_PADDING, DOCK_GAP_CUSTOM, DOCK_GAP);
         lifeCycle.addCloseable(() -> prefs.removeListener(prefListener,
                 FIXED_LANDSCAPE_MODE, ENABLE_TWOLINE_ALLAPPS_TOGGLE, GRID_WIDTH, GRID_HEIGHT,
                 DRAWER_GRID_WIDTH_OVERRIDE, ICON_SIZE, ICON_LABEL_SIZE, LABEL_VISIBILITY,
-                DRAWER_PADDING));
+                DRAWER_PADDING, DOCK_GAP_CUSTOM, DOCK_GAP));
 
         SimpleBroadcastReceiver localeReceiver = new SimpleBroadcastReceiver(context,
                 MAIN_EXECUTOR, i -> onConfigChanged(context));

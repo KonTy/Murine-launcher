@@ -26,6 +26,7 @@ import static com.android.launcher3.util.MultiTranslateDelegate.INDEX_WIDGET_CEN
 
 import android.app.WallpaperManager;
 import android.content.Context;
+import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
@@ -173,6 +174,9 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
                     dp.cellYPaddingPx >= 0 && mContainerType == WORKSPACE
                             ? dp.cellYPaddingPx
                             : (int) Math.max(0, ((lp.height - cHeight) / 2f));
+            if (mContainerType == WORKSPACE && dp.alignsWorkspaceToDock()) {
+                cellPaddingY = Math.max(0, lp.height - heightDownToLabelText(child, dp, cHeight));
+            }
 
             // No need to add padding when cell layout border spacing is present.
             boolean noPaddingX =
@@ -193,6 +197,16 @@ public class ShortcutAndWidgetContainer extends ViewGroup implements FolderIcon.
 
     private boolean isChildQsb(View child) {
         return child.getId() == R.id.search_container_workspace;
+    }
+
+    private static int heightDownToLabelText(View child, DeviceProfile dp, int fallback) {
+        BubbleTextView label = child instanceof FolderIcon folder ? folder.getFolderName()
+                : child instanceof BubbleTextView icon ? icon : null;
+        if (label == null) {
+            return fallback;
+        }
+        Paint.FontMetrics font = label.getPaint().getFontMetrics();
+        return dp.iconSizePx + dp.iconDrawablePaddingPx + (int) Math.ceil(font.descent - font.top);
     }
 
     public boolean invertLayoutHorizontally() {

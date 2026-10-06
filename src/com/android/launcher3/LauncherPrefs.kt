@@ -322,6 +322,10 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
             defaultGridHeight(isTablet)
         }
         @JvmField
+        val DOCK_GAP_CUSTOM = backedUpItem(SettingsHomeFragment.DOCK_GAP_CUSTOM, false)
+        @JvmField
+        val DOCK_GAP = backedUpItem(SettingsHomeFragment.DOCK_GAP, 5)
+        @JvmField
         val DRAWER_GRID_WIDTH_OVERRIDE = backedUpItem(SettingsDrawerFragment.GRID_SIZE_WIDTH_DRAWER_OVERRIDE, 0)
         @JvmField
         val DRAWER_PADDING = backedUpItem(SettingsDrawerFragment.DRAWER_PADDING, 100)

@@ -40,6 +40,9 @@
     <string name="pref_label_ui_mode_night">Dark</string>
     <string name="pref_label_grid_width">Grid width</string>
     <string name="pref_label_grid_height">Grid height</string>
+    <string name="pref_dock_gap_custom_title">Custom space above dock</string>
+    <string name="pref_dock_gap_custom_summary">Bring the bottom row of apps closer to the dock</string>
+    <string name="pref_dock_gap_title">Space above dock</string>
     <string name="pref_label_icon_size">Icon size (%)</string>
     <string name="pref_label_icon_label_size">Label size (%)</string>
 
