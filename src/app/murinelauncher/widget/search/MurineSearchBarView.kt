@@ -8,6 +8,7 @@ import android.net.Uri
 import android.speech.RecognizerIntent
 import android.util.AttributeSet
 import android.util.Log
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.animation.DecelerateInterpolator
@@ -17,6 +18,7 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.view.updateLayoutParams
 import app.murinelauncher.widget.search.voice.VoiceSearch
 import com.android.app.animation.Interpolators
 import com.android.launcher3.Launcher
@@ -64,8 +66,18 @@ class MurineSearchBarView @JvmOverloads constructor(
         assistantSearchButton = findViewById(R.id.murine_assistant_search_btn)
         searchPlate = findViewById(R.id.murine_search_plate)
 
+        fitContainerAroundPlate()
         refreshProvider()
         setupClickListeners()
+    }
+
+    private fun fitContainerAroundPlate() {
+        val border = resources.getDimensionPixelSize(R.dimen.murine_search_container_padding)
+        val plateHeight = resources.getDimensionPixelSize(R.dimen.murine_search_plate_height)
+        containerBg.updateLayoutParams<LayoutParams> {
+            height = plateHeight + 2 * border
+            gravity = Gravity.CENTER
+        }
     }
 
     private fun showGoogleButtonsOrMoveMicIntoTheirPlace() {

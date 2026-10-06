@@ -55,7 +55,7 @@
 <!-- Murine search bar dimensions (tablet) -->
     <dimen name="murine_search_widget_height">72dp</dimen> <!-- referenced by qsb_widget_height -->
     <dimen name="murine_search_plate_height">56dp</dimen>
-    <dimen name="murine_search_container_padding">8dp</dimen>
+    <dimen name="murine_search_container_padding">1px</dimen>
     <dimen name="murine_search_buttons_padding">8dp</dimen>
     <dimen name="murine_search_provider_icon_size">28.8dp</dimen>
     <dimen name="murine_search_bar_icons_size">28.8dp</dimen>
