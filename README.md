@@ -76,6 +76,28 @@ Last tested on:
 
 whisper.cpp is a git submodule built from source, so clone with `git clone --recurse-submodules` (or run `git submodule update --init` in an existing checkout). Building it needs the Android NDK (28.2.13676358) and CMake 3.22.1 from the SDK manager.
 
+## Local backup and recovery
+
+Local restores validate the archive, preference XML, active grid and SQLite integrity before
+restarting. Both `.rat` archives and legacy ZIP backups are supported, up to 128 MiB unpacked.
+Backups from a newer database schema need a matching or newer launcher version; imported
+downgrade SQL is never executed.
+
+The first startup preserves the previous databases (including WAL/journal files), preferences
+and widget references until the restored workspace has loaded successfully. If installation or
+that initial load fails or is interrupted, the next startup restores the previous files and
+shows a failure message. Recovery files are retained if recovery itself fails. Do not clear
+launcher storage or delete these files to work around a restore failure.
+
+An irreparable existing database or failed grid migration is not replaced with a default layout.
+The launcher reports the failure and keeps its data; settings remain available to import a valid
+backup or select a working grid. A database requiring an unsupported downgrade needs a compatible
+launcher build. Ordinary fresh installations still initialize their default layout.
+
+Off-device restore regressions use Robolectric with native SQLite:
+`testAospWithoutQuickstepDebugUnitTest --tests '*RestoreReliabilityTest' --tests '*LayoutFailureTest'`.
+They use only disposable test data; no device installation is needed.
+
 ## Buy me a beer
 
 <a href="https://www.paypal.com/donate/?hosted_button_id=3HRAWU9KVYKKS">
