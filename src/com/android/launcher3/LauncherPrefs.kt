@@ -430,7 +430,6 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
         val QSB_BUBBLE_ALPHA = backedUpItem(SettingsQsbFragment.SEARCH_BUBBLE_ALPHA, 90)
         @JvmField
         val VOICE_SEARCH_MODE = backedUpItem(SettingsVoiceSearchFragment.VOICE_SEARCH_MODE, VoiceSearchMode.OFFLINE)
-        // The model files themselves are never backed up, so neither is the choice among them
         @JvmField
         val VOICE_SEARCH_MODEL = nonRestorableItem(SettingsVoiceSearchFragment.VOICE_SEARCH_MODEL, "")
         @JvmField

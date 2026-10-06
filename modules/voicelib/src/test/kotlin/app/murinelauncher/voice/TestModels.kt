@@ -5,7 +5,6 @@ import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-/** Builds small, structurally valid whisper.cpp GGML files for tests. */
 object TestModels {
 
     fun bytes(
@@ -22,23 +21,34 @@ object TestModels {
         val out = ByteArrayOutputStream()
         fun int(v: Int) = out.write(ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(v).array())
 
-        int(magic)
-        listOf(nVocab, audioCtx, width, 6, layers, 448, width, 6, layers, 80, ftype).forEach(::int)
-        // Mel filters: n_mel, n_fft, floats
-        int(80); int(2)
-        repeat(80 * 2) { int(0) }
-        // Vocabulary
-        int(100)
-        repeat(100) { int(1); out.write('a'.code + it % 26) }
-        // Tensors: Q8_0 [32 x 2] = 2 blocks of 34 bytes
-        repeat(tensors) { i ->
-            val name = "tensor.$i".toByteArray()
+        fun header() {
+            int(magic)
+            listOf(nVocab, audioCtx, width, 6, layers, 448, width, 6, layers, 80, ftype).forEach(::int)
+        }
+
+        fun melFilters(mels: Int = 80, fft: Int = 2) {
+            int(mels); int(fft)
+            repeat(mels * fft) { int(0) }
+        }
+
+        fun vocabulary(words: Int = 100) {
+            int(words)
+            repeat(words) { int(1); out.write('a'.code + it % 26) }
+        }
+
+        fun q8Tensor32x2(index: Int) {
+            val name = "tensor.$index".toByteArray()
             int(2); int(name.size); int(tensorType)
             int(32); int(2)
             out.write(name)
             val (block, size) = if (tensorType == 0) 1 to 4 else 32 to 34
-            out.write(ByteArray(64 / block * size) { (it + i + seed).toByte() })
+            out.write(ByteArray(64 / block * size) { (it + index + seed).toByte() })
         }
+
+        header()
+        melFilters()
+        vocabulary()
+        repeat(tensors, ::q8Tensor32x2)
         return out.toByteArray()
     }
 }

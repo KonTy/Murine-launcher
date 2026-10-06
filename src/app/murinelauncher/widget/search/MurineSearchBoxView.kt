@@ -85,7 +85,7 @@ class MurineSearchBoxView(context: Context, attrs: AttributeSet?) :
     private var voice: VoiceSearchPresenter? = null
     private var startWithVoice = false
     private var initialQuery: String? = null
-    private var settingVoiceText = false
+    private var fillingInTranscript = false
 
     override fun onFinishInflate() {
         super.onFinishInflate()
@@ -120,8 +120,7 @@ class MurineSearchBoxView(context: Context, attrs: AttributeSet?) :
 
         searchInput.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
-                // Typing while listening means the user changed their mind about speaking
-                if (!settingVoiceText && voice?.state == MicState.LISTENING) voice?.cancel()
+                if (!fillingInTranscript && voice?.state == MicState.LISTENING) voice?.cancel()
                 onQueryChanged(s?.toString().orEmpty())
             }
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -138,12 +137,10 @@ class MurineSearchBoxView(context: Context, attrs: AttributeSet?) :
         voiceLevel = findViewById(R.id.search_voice_level)
         if (!VoiceSearch.isOfflineEnabled(context)) return
         voiceContainer.visibility = View.VISIBLE
-        // Keep the text clear of the button
         searchInput.setPaddingRelative(searchInput.paddingStart, searchInput.paddingTop,
-            resources.getDimensionPixelSize(R.dimen.murine_search_voice_inset), searchInput.paddingBottom)
+            resources.getDimensionPixelSize(R.dimen.murine_search_input_mic_clearance), searchInput.paddingBottom)
         voiceButton.setOnClickListener {
             val presenter = voicePresenter()
-            // Starting goes through the permission and model checks; stop / cancel do not
             if (presenter.state == MicState.IDLE) VoiceSearch.onMicTapped(launcher)
             else presenter.onMicTapped()
         }
@@ -173,7 +170,6 @@ class MurineSearchBoxView(context: Context, attrs: AttributeSet?) :
             }
             MicState.PROCESSING -> {
                 voiceProgress.visibility = View.VISIBLE
-                // The spinner shows through; the button stays tappable to cancel
                 voiceButton.imageAlpha = 0
                 voiceLevel.alpha = 0f
                 searchInput.hint = context.getString(R.string.voice_search_transcribing)
@@ -192,12 +188,11 @@ class MurineSearchBoxView(context: Context, attrs: AttributeSet?) :
             .start()
     }
 
-    /** The transcript, as if typed: the field shows matching apps, nothing is submitted. */
     override fun setQuery(text: String) {
-        settingVoiceText = true
+        fillingInTranscript = true
         searchInput.setText(text)
         searchInput.setSelection(searchInput.length())
-        settingVoiceText = false
+        fillingInTranscript = false
     }
 
     override fun showFailure(failure: VoiceRecognizer.Failure) {
@@ -561,7 +556,6 @@ class MurineSearchBoxView(context: Context, attrs: AttributeSet?) :
                 .firstOrNull { it.isOpen }
         }
 
-        /** Opens the search box listening, or starts listening in the one already open. */
         @JvmStatic
         fun showForVoice(launcher: Launcher) {
             val open = openBox(launcher)
@@ -572,14 +566,12 @@ class MurineSearchBoxView(context: Context, attrs: AttributeSet?) :
             show(launcher) { it.startWithVoice = true }
         }
 
-        /** Opens the search box with [query] filled in, showing its results. */
         @JvmStatic
         fun showWithQuery(launcher: Launcher, query: String) {
             val open = openBox(launcher)
             if (open != null) open.setQuery(query) else show(launcher) { it.initialQuery = query }
         }
 
-        /** Stops voice input in the open search box, if any (the launcher is going to the background). */
         @JvmStatic
         fun cancelVoiceInput(launcher: Launcher) {
             openBox(launcher)?.voice?.cancel()

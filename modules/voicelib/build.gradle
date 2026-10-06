@@ -2,8 +2,6 @@ plugins {
     id 'com.android.library'
 }
 
-// On-device speech-to-text for the voice search: whisper.cpp (git submodule, built from source with
-// CMake and the NDK) plus model management, microphone capture and the recognition state machine.
 android {
     namespace = "app.murinelauncher.voice"
     compileSdk 36
@@ -15,8 +13,6 @@ android {
 
         externalNativeBuild {
             cmake {
-                // Always optimized: at -O0 inference is an order of magnitude slower, which would
-                // make debug builds useless for trying voice search
                 arguments '-DCMAKE_BUILD_TYPE=Release', '-DANDROID_STL=c++_static'
             }
         }

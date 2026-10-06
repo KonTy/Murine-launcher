@@ -34,13 +34,6 @@ import com.android.launcher3.util.Executors.MAIN_EXECUTOR
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Voice search settings: what the microphone does, the on-device speech models (download through
- * the browser, import, choose, delete) and the recognition language.
- *
- * Murine has no internet permission: models are downloaded by the user's browser from FUTO's server
- * and then imported from the file, which is verified and copied into private storage.
- */
 class SettingsVoiceSearchFragment : AbstractSettingsFragment() {
 
     companion object {
@@ -53,8 +46,8 @@ class SettingsVoiceSearchFragment : AbstractSettingsFragment() {
         private const val LICENSES = "voice_search_licenses"
         private const val MODEL_PREFIX = "voice_model_"
         private const val TAG = "MurineVoiceSettings"
+        private val ANY_FILE_TYPE = arrayOf("*/*")
 
-        /** Summary for the search settings entry. */
         @JvmStatic
         fun summary(context: Context): CharSequence {
             if (VoiceSearch.mode(context) == VoiceSearchMode.SYSTEM) {
@@ -117,7 +110,6 @@ class SettingsVoiceSearchFragment : AbstractSettingsFragment() {
                     if (!VoiceSearch.isOfflineSupported) setCurrentValue { VoiceSearchMode.SYSTEM }
                 }
             }
-            // Nothing to set up without a speech library for this CPU
             MODELS, VOICE_SEARCH_LANGUAGE -> return VoiceSearch.isOfflineSupported
             IMPORT -> preference.setOnPreferenceClickListener {
                 pickModelFile()
@@ -141,7 +133,6 @@ class SettingsVoiceSearchFragment : AbstractSettingsFragment() {
     }
 
     override fun onDestroy() {
-        // Leaving mid-import: stop copying, the store removes the partial file
         importCancel?.set(true)
         importDialog?.dismiss()
         super.onDestroy()
@@ -250,7 +241,7 @@ class SettingsVoiceSearchFragment : AbstractSettingsFragment() {
             .setTitle(modelName(ctx, model, null))
             .setMessage(ctx.getString(R.string.pref_voice_download_message,
                 Formatter.formatShortFileSize(ctx, model.bytes), model.approxRamMb))
-            .setPositiveButton(R.string.pref_voice_download_action) { _, _ -> openUrl(model.url) }
+            .setPositiveButton(R.string.pref_voice_download_action) { _, _ -> openUrl(model.downloadUrl) }
             .setNeutralButton(R.string.pref_voice_import_action) { _, _ -> pickModelFile() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
@@ -289,8 +280,7 @@ class SettingsVoiceSearchFragment : AbstractSettingsFragment() {
 
     private fun pickModelFile() {
         try {
-            // .bin files have no registered type; filter by content when importing
-            importModel.launch(arrayOf("*/*"))
+            importModel.launch(ANY_FILE_TYPE)
         } catch (e: ActivityNotFoundException) {
             Log.w(TAG, "No document picker", e)
             Toast.makeText(requireContext(), R.string.activity_not_found, Toast.LENGTH_SHORT).show()
@@ -373,7 +363,6 @@ class SettingsVoiceSearchFragment : AbstractSettingsFragment() {
         }
     }
 
-    /** The model now has a private copy: the downloaded file only takes space twice. */
     private fun offerSourceDeletion(source: Uri) {
         val ctx = context ?: return
         val resolver = ctx.contentResolver

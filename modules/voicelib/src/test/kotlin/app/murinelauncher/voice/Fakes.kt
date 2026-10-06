@@ -14,7 +14,6 @@ import kotlin.math.sin
 import kotlin.random.Random
 import kotlinx.coroutines.asCoroutineDispatcher
 
-/** Microphone stand-in: plays [frames], then blocks like a live microphone until stopped. */
 class FakeAudioSource(
     private val frames: List<ShortArray>,
     private val startResult: Boolean = true,
@@ -79,7 +78,6 @@ class FakeAudioSource(
     }
 }
 
-/** Model stand-in. */
 class FakeEngine(
     private val text: String? = "Calculator.",
     private val blockUntilAborted: Boolean = false,
@@ -113,7 +111,6 @@ class FakeEngine(
     }
 }
 
-/** Records recognizer callbacks. */
 class RecordingListener : VoiceRecognizer.Listener {
     val events: MutableList<String> = Collections.synchronizedList(ArrayList())
     val done = CountDownLatch(1)
@@ -139,7 +136,6 @@ class RecordingListener : VoiceRecognizer.Listener {
     fun await() = check(done.await(10, TimeUnit.SECONDS)) { "No result; events: $events" }
 }
 
-/** Wires a [VoiceRecognizer] to fakes and keeps track of the threads it creates. */
 class RecognizerHarness(
     val source: FakeAudioSource? = FakeAudioSource(FakeAudioSource.speech(1000) + FakeAudioSource.silence(1500)),
     val engine: FakeEngine? = FakeEngine(),
@@ -172,7 +168,6 @@ class RecognizerHarness(
         executorFactory = { Executors.newFixedThreadPool(2).also { executors += it } },
     )
 
-    /** Waits until every worker thread of the query has been shut down. */
     fun awaitCleanup() {
         val deadline = System.currentTimeMillis() + 10_000
         while (System.currentTimeMillis() < deadline) {

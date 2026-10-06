@@ -11,17 +11,13 @@ import java.security.MessageDigest
 import java.util.Collections
 import java.util.UUID
 
-/** A model file installed in the app's private storage. */
 data class InstalledModel(val file: File, val header: WhisperHeader, val catalog: CatalogModel?) {
     val id: String get() = file.nameWithoutExtension
     val multilingual: Boolean get() = header.isMultilingual
     val bytes: Long get() = file.length()
 
-    /**
-     * Only the FUTO fine-tuned models are known to tolerate a dynamic (shortened) audio context;
-     * any other model runs with Whisper's full 30 s context, slower but without repetition loops.
-     */
-    val dynamicAudioContext: Boolean get() = catalog != null
+    val isFutoAcftModel: Boolean get() = catalog != null
+    val dynamicAudioContext: Boolean get() = isFutoAcftModel
 }
 
 enum class ImportError { TOO_LARGE, NO_SPACE, NOT_A_MODEL, CORRUPT, IO, CANCELLED }
@@ -31,23 +27,14 @@ sealed interface ImportResult {
     data class Failed(val error: ImportError) : ImportResult
 }
 
-/**
- * Speech models in a private directory (the app passes its no-backup files dir, so models never
- * end up in device backups or in the launcher's own backup files).
- *
- * Imports are written to a temporary file, verified (size, GGML structure, SHA-256), synced, then
- * atomically renamed into place: a crash or a cancelled import never leaves a half-written model
- * under a real name, and leftover temporary files are removed on the next scan.
- */
 class VoiceModelStore(
     val dir: File,
     private val maxBytes: Long = MAX_MODEL_BYTES,
     private val catalog: List<CatalogModel> = VoiceModelCatalog.models,
 ) {
 
-    /** Installed models: catalog models in catalog order, then other imported models. */
     fun installed(): List<InstalledModel> {
-        cleanupPartials()
+        deleteAbandonedImports()
         val files = dir.listFiles { f -> f.isFile && f.name.endsWith(MODEL_SUFFIX) } ?: return emptyList()
         return files.mapNotNull { file ->
             val header = try {
@@ -64,14 +51,8 @@ class VoiceModelStore(
 
     fun find(id: String): InstalledModel? = installed().firstOrNull { it.id == id }
 
-    /** Cheap check (one directory listing, no file reads) for the UI thread. */
     fun hasAnyModel(): Boolean = dir.list()?.any { it.endsWith(MODEL_SUFFIX) && !it.startsWith(".") } == true
 
-    /**
-     * Copies a model from [input] (closed by the caller), reporting the bytes copied so far.
-     * [expectedBytes] is the size reported by the source, or a negative value when unknown.
-     * Blocking: call it off the main thread.
-     */
     fun import(
         input: InputStream,
         expectedBytes: Long,
@@ -84,7 +65,7 @@ class VoiceModelStore(
         if (dir.usableSpace in 0 until needed) return ImportResult.Failed(ImportError.NO_SPACE)
 
         val temp = File(dir, "$PARTIAL_PREFIX${UUID.randomUUID()}$PARTIAL_SUFFIX")
-        activeTemps.add(temp.name)
+        importsInProgress.add(temp.name)
         try {
             val digest = MessageDigest.getInstance("SHA-256")
             var copied = 0L
@@ -101,13 +82,8 @@ class VoiceModelStore(
                         val take = minOf(n, head.size - headLength)
                         System.arraycopy(buffer, 0, head, headLength, take)
                         headLength += take
-                        // Reject foreign files on the first bytes, not after copying them whole
-                        if (headLength == head.size) {
-                            try {
-                                WhisperFile.parseHeader(head)
-                            } catch (_: InvalidModelException) {
-                                return ImportResult.Failed(ImportError.NOT_A_MODEL)
-                            }
+                        if (headLength == head.size && !looksLikeModel(head)) {
+                            return ImportResult.Failed(ImportError.NOT_A_MODEL)
                         }
                     }
                     copied += n
@@ -138,26 +114,30 @@ class VoiceModelStore(
             return ImportResult.Failed(ImportError.IO)
         } finally {
             temp.delete()
-            activeTemps.remove(temp.name)
+            importsInProgress.remove(temp.name)
         }
     }
 
-    /** Deletes an installed model; returns false if it did not exist or could not be removed. */
+    private fun looksLikeModel(header: ByteArray) = try {
+        WhisperFile.parseHeader(header)
+        true
+    } catch (_: InvalidModelException) {
+        false
+    }
+
     fun delete(id: String): Boolean {
         if (id.contains(File.separatorChar) || id.startsWith(".")) return false
         val file = File(dir, "$id$MODEL_SUFFIX")
         return file.isFile && file.delete()
     }
 
-    /** Removes temporary files left behind by an import that did not finish (crash, kill). */
-    fun cleanupPartials() {
+    fun deleteAbandonedImports() {
         dir.listFiles { f ->
-            f.name.startsWith(PARTIAL_PREFIX) && f.name.endsWith(PARTIAL_SUFFIX) && f.name !in activeTemps
+            f.name.startsWith(PARTIAL_PREFIX) && f.name.endsWith(PARTIAL_SUFFIX) && f.name !in importsInProgress
         }?.forEach { it.delete() }
     }
 
     companion object {
-        /** Big enough for every FUTO model (the largest is ~265 MB), small enough for a phone. */
         const val MAX_MODEL_BYTES = 512L * 1024 * 1024
         const val MODEL_SUFFIX = ".bin"
         const val CUSTOM_PREFIX = "custom-"
@@ -166,8 +146,7 @@ class VoiceModelStore(
         private const val FREE_SPACE_MARGIN = 32L * 1024 * 1024
         private const val COPY_BUFFER = 256 * 1024
 
-        // Imports in progress in this process, so a concurrent scan does not delete their file
-        private val activeTemps: MutableSet<String> = Collections.synchronizedSet(HashSet())
+        private val importsInProgress: MutableSet<String> = Collections.synchronizedSet(HashSet())
 
         private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
     }

@@ -22,21 +22,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Thrown by a [SpeechEngineFactory] when loading the model would exhaust the device's memory. */
 class InsufficientMemoryException(message: String) : IOException(message)
 
-/** Thrown by a [SpeechEngineFactory] when no model is installed. */
 class ModelMissingException : IOException("No speech model installed")
 
-/**
- * One voice query: listen until the speaker stops, transcribe on-device, report the text.
- *
- * The model loads while the user speaks and is released as soon as the transcription is done, so
- * nothing stays in memory between queries. Two short-lived threads exist only for the duration of a
- * query (one reads the microphone, one loads and runs the model). Each query ends with exactly one
- * [Listener.onResult] or [Listener.onFailure], on [mainDispatcher], unless it was [cancel]led, after
- * which the listener hears nothing more. An instance is single use.
- */
 class VoiceRecognizer(
     private val engineFactory: SpeechEngineFactory?,
     private val audioSourceFactory: () -> AudioSource,
@@ -67,7 +56,11 @@ class VoiceRecognizer(
 
     private enum class CaptureOutcome { SPEECH, NO_SPEECH, MIC_UNAVAILABLE, STOPPED }
 
-    private class Captured(val samples: ShortArray, val start: Int, val end: Int, val outcome: CaptureOutcome)
+    private class Captured(val samples: ShortArray, val start: Int, val end: Int, val outcome: CaptureOutcome) {
+        companion object {
+            fun nothing(outcome: CaptureOutcome) = Captured(ShortArray(0), 0, 0, outcome)
+        }
+    }
 
     private sealed interface Loaded {
         class Ok(val engine: SpeechEngine) : Loaded
@@ -83,7 +76,6 @@ class VoiceRecognizer(
     @Volatile private var timedOut = false
     private var job: Job? = null
 
-    /** True from [start] until the result, a failure or [cancel]. */
     val isActive: Boolean get() = started.get() && !finished.get()
 
     fun start() {
@@ -98,7 +90,7 @@ class VoiceRecognizer(
                 coroutineScope {
                     val loaded = async(worker) { load(factory) }
                     val outcome = try {
-                        pipeline(loaded, worker)
+                        listenThenTranscribe(loaded, worker)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -110,7 +102,6 @@ class VoiceRecognizer(
                         is String -> finish(text = outcome)
                         is Failure -> finish(outcome)
                     }
-                    // Returns once the model load finished too, so cleanup below sees the engine
                 }
             } finally {
                 release(worker)
@@ -123,14 +114,12 @@ class VoiceRecognizer(
         scope.cancel()
     }
 
-    /** Stops listening and transcribes what was said so far (the user tapped the microphone). */
     fun stopListening() {
         if (!isActive || stop != Stop.NONE) return
         stop = Stop.USER
         sourceRef.get()?.stop()
     }
 
-    /** Abandons the query: stops the microphone, aborts the model, no further callbacks. */
     fun cancel() {
         if (!finished.compareAndSet(false, true)) return
         stop = Stop.CANCEL
@@ -145,28 +134,25 @@ class VoiceRecognizer(
         if (stop == Stop.CANCEL) engine.abort()
         Loaded.Ok(engine)
     } catch (e: InsufficientMemoryException) {
-        failEarly()
+        stopListeningAfterModelFailure()
         Loaded.Failed(Failure.LOW_MEMORY)
     } catch (e: ModelMissingException) {
-        failEarly()
+        stopListeningAfterModelFailure()
         Loaded.Failed(Failure.MODEL_MISSING)
     } catch (e: Exception) {
-        failEarly()
+        stopListeningAfterModelFailure()
         Loaded.Failed(Failure.MODEL_FAILED)
     } catch (e: LinkageError) {
-        // A missing or broken native library must not take the launcher down
-        failEarly()
+        stopListeningAfterModelFailure()
         Loaded.Failed(Failure.MODEL_FAILED)
     }
 
-    /** No point listening once the model is known not to load. */
-    private fun failEarly() {
+    private fun stopListeningAfterModelFailure() {
         if (stop == Stop.NONE) stop = Stop.ENGINE_FAILED
         sourceRef.get()?.stop()
     }
 
-    /** Returns the transcript or a [Failure]. */
-    private suspend fun CoroutineScope.pipeline(loaded: Deferred<Loaded>, worker: CoroutineDispatcher): Any {
+    private suspend fun CoroutineScope.listenThenTranscribe(loaded: Deferred<Loaded>, worker: CoroutineDispatcher): Any {
         val captured = withContext(worker) { capture() }
         when (captured.outcome) {
             CaptureOutcome.MIC_UNAVAILABLE -> return Failure.MIC_UNAVAILABLE
@@ -187,14 +173,10 @@ class VoiceRecognizer(
         }
         val raw = withContext(worker) {
             try {
-                val count = maxOf(captured.end - captured.start, MIN_TRANSCRIBE_SAMPLES)
-                // Zero-padded to Whisper's minimum input length
-                val pcm = FloatArray(count)
-                for (i in captured.start until captured.end) pcm[i - captured.start] = captured.samples[i] / 32768f
-                engine.transcribe(pcm, count)
+                val pcm = paddedPcm(captured)
+                engine.transcribe(pcm, pcm.size)
             } finally {
-                // Free the model right away rather than when the UI is done with the result
-                engineRef.getAndSet(null)?.close()
+                releaseEngineNow()
             }
         }
         watchdog.cancel()
@@ -203,22 +185,29 @@ class VoiceRecognizer(
         return text.ifEmpty { Failure.NO_SPEECH }
     }
 
-    /** Blocking capture loop; runs on a worker thread. */
+    private fun paddedPcm(captured: Captured): FloatArray {
+        val pcm = FloatArray(maxOf(captured.end - captured.start, WHISPER_MIN_INPUT_SAMPLES))
+        for (i in captured.start until captured.end) pcm[i - captured.start] = captured.samples[i] / PCM16_FULL_SCALE
+        return pcm
+    }
+
+    private fun releaseEngineNow() {
+        engineRef.getAndSet(null)?.close()
+    }
+
     private fun capture(): Captured {
-        val empty = ShortArray(0)
         if (stop != Stop.NONE) return stoppedBeforeListening()
         val source = try {
             audioSourceFactory()
         } catch (_: Exception) {
-            return Captured(empty, 0, 0, CaptureOutcome.MIC_UNAVAILABLE)
+            return Captured.nothing(CaptureOutcome.MIC_UNAVAILABLE)
         }
         sourceRef.set(source)
         try {
-            // A stop that raced with the source being published or started
             if (stop != Stop.NONE) return stoppedBeforeListening()
             if (!source.start()) {
                 return if (stop != Stop.NONE) stoppedBeforeListening()
-                else Captured(empty, 0, 0, CaptureOutcome.MIC_UNAVAILABLE)
+                else Captured.nothing(CaptureOutcome.MIC_UNAVAILABLE)
             }
 
             val frame = EndpointDetector.FRAME_SAMPLES
@@ -236,23 +225,23 @@ class VoiceRecognizer(
                 }
                 when (stop) {
                     Stop.USER -> return userStopped(buffer, count + filled, detector)
-                    Stop.CANCEL, Stop.ENGINE_FAILED -> return Captured(empty, 0, 0, CaptureOutcome.STOPPED)
+                    Stop.CANCEL, Stop.ENGINE_FAILED -> return Captured.nothing(CaptureOutcome.STOPPED)
                     Stop.NONE -> Unit
                 }
-                if (filled < frame) return Captured(empty, 0, 0, CaptureOutcome.MIC_UNAVAILABLE)
+                if (filled < frame) return Captured.nothing(CaptureOutcome.MIC_UNAVAILABLE)
 
                 val result = detector.feed(buffer, count, frame)
                 count += frame
                 frames++
                 if (frames % LEVEL_EVERY_FRAMES == 0) postLevel(detector.level)
                 if (frames % INTERRUPT_CHECK_FRAMES == 0 && source.isInterrupted()) {
-                    return Captured(empty, 0, 0, CaptureOutcome.MIC_UNAVAILABLE)
+                    return Captured.nothing(CaptureOutcome.MIC_UNAVAILABLE)
                 }
                 when (result) {
                     EndpointDetector.Result.END_OF_SPEECH, EndpointDetector.Result.MAX_LENGTH ->
                         return speech(buffer, count, detector)
-                    EndpointDetector.Result.NO_SPEECH -> return Captured(empty, 0, 0, CaptureOutcome.NO_SPEECH)
-                    EndpointDetector.Result.DEAD_INPUT -> return Captured(empty, 0, 0, CaptureOutcome.MIC_UNAVAILABLE)
+                    EndpointDetector.Result.NO_SPEECH -> return Captured.nothing(CaptureOutcome.NO_SPEECH)
+                    EndpointDetector.Result.DEAD_INPUT -> return Captured.nothing(CaptureOutcome.MIC_UNAVAILABLE)
                     EndpointDetector.Result.WAITING, EndpointDetector.Result.SPEECH -> Unit
                 }
             }
@@ -263,20 +252,17 @@ class VoiceRecognizer(
         }
     }
 
-    /** A tap before the microphone even started means nothing was said. */
-    private fun stoppedBeforeListening() = Captured(ShortArray(0), 0, 0,
-        if (stop == Stop.USER) CaptureOutcome.NO_SPEECH else CaptureOutcome.STOPPED)
+    private fun stoppedBeforeListening() =
+        Captured.nothing(if (stop == Stop.USER) CaptureOutcome.NO_SPEECH else CaptureOutcome.STOPPED)
 
     private fun userStopped(buffer: ShortArray, count: Int, detector: EndpointDetector): Captured {
-        // Without a detected onset (a quiet speaker), still try whatever was recorded
         if (detector.speechStarted) return speech(buffer, count, detector)
         return if (count >= MIN_USER_STOP_SAMPLES) Captured(buffer, 0, count, CaptureOutcome.SPEECH)
-        else Captured(ShortArray(0), 0, 0, CaptureOutcome.NO_SPEECH)
+        else Captured.nothing(CaptureOutcome.NO_SPEECH)
     }
 
-    /** Trims silence around the speech (a shorter input is a faster transcription). */
     private fun speech(buffer: ShortArray, count: Int, detector: EndpointDetector): Captured {
-        if (!detector.speechStarted) return Captured(ShortArray(0), 0, 0, CaptureOutcome.NO_SPEECH)
+        if (!detector.speechStarted) return Captured.nothing(CaptureOutcome.NO_SPEECH)
         val frame = EndpointDetector.FRAME_SAMPLES
         val start = maxOf(0, (detector.onsetFrame - LEAD_IN_FRAMES) * frame)
         val end = minOf(count, (detector.lastSpeechFrame + 1 + TAIL_FRAMES) * frame)
@@ -309,12 +295,14 @@ class VoiceRecognizer(
     }
 
     companion object {
-        private const val LEAD_IN_FRAMES = 15      // 300 ms before the onset
-        private const val TAIL_FRAMES = 15         // 300 ms after the last speech
-        private const val LEVEL_EVERY_FRAMES = 4   // 80 ms
-        private const val INTERRUPT_CHECK_FRAMES = 25
-        private const val MIN_USER_STOP_SAMPLES = WhisperTuning.SAMPLE_RATE * 3 / 10
-        /** whisper.cpp refuses inputs shorter than 1 s. */
-        private const val MIN_TRANSCRIBE_SAMPLES = WhisperTuning.SAMPLE_RATE + WhisperTuning.SAMPLE_RATE / 10
+        private const val SAMPLES_PER_MS = WhisperTuning.SAMPLE_RATE / 1000
+        private const val LEAD_IN_FRAMES = 300 / EndpointDetector.FRAME_MS
+        private const val TAIL_FRAMES = 300 / EndpointDetector.FRAME_MS
+        private const val LEVEL_EVERY_FRAMES = 80 / EndpointDetector.FRAME_MS
+        private const val INTERRUPT_CHECK_FRAMES = 500 / EndpointDetector.FRAME_MS
+        private const val MIN_USER_STOP_SAMPLES = 300 * SAMPLES_PER_MS
+        // whisper.cpp rejects anything shorter than one second; the extra 100 ms keeps clear of it
+        private const val WHISPER_MIN_INPUT_SAMPLES = 1100 * SAMPLES_PER_MS
+        private const val PCM16_FULL_SCALE = 32768f
     }
 }

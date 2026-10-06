@@ -13,7 +13,6 @@
         android:key="voice_search_models"
         android:title="@string/pref_voice_models_title">
 
-        <!-- One entry per model is added in code, above this one -->
         <Preference
             android:key="voice_search_import"
             android:order="10000"

@@ -9,10 +9,8 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-/** Thrown when a file is not a usable whisper.cpp GGML model. */
 class InvalidModelException(message: String) : IOException(message)
 
-/** Hyperparameters from the header of a whisper.cpp GGML model file. */
 data class WhisperHeader(
     val nVocab: Int,
     val nAudioCtx: Int,
@@ -26,16 +24,13 @@ data class WhisperHeader(
     val nMels: Int,
     val ftype: Int,
 ) {
-    /** English-only checkpoints have one token fewer than the multilingual ones. */
     val isMultilingual: Boolean get() = nVocab >= WhisperFile.MULTILINGUAL_VOCAB
 
-    /** Quantization of the weights, without the quantization-version factor. */
     val weightType: Int get() = ftype % WhisperFile.QNT_VERSION_FACTOR
 
     val size: ModelSize get() = ModelSize.of(nAudioState, nAudioLayer)
 }
 
-/** OpenAI Whisper checkpoint sizes, recognised from the encoder width and depth. */
 enum class ModelSize(val width: Int, val layers: Int) {
     TINY(384, 4), BASE(512, 6), SMALL(768, 12), MEDIUM(1024, 24), LARGE(1280, 32), UNKNOWN(0, 0);
 
@@ -45,14 +40,6 @@ enum class ModelSize(val width: Int, val layers: Int) {
     }
 }
 
-/**
- * Reads and validates the whisper.cpp GGML model format (magic `ggml`, as written by the
- * whisper.cpp conversion scripts and as published by FUTO for its fine-tuned models).
- *
- * [validate] walks the whole file the way the native loader does, without reading the weights,
- * so that a truncated download or a foreign file is rejected before it is installed and before
- * any native code allocates memory based on its contents.
- */
 object WhisperFile {
     const val MAGIC = 0x67676d6c
     const val QNT_VERSION_FACTOR = 1000
@@ -63,30 +50,21 @@ object WhisperFile {
     private const val MAX_VOCAB_ENTRY = 1024
     private const val MAX_TENSOR_NAME = 256
     private const val MAX_DIM = 1 shl 24
+    private const val READ_WINDOW_BYTES = 64 * 1024
 
-    // ggml_ftype values whisper.cpp can load
-    private val SUPPORTED_FTYPES = setOf(0, 1, 2, 3, 7, 8, 9, 10, 11, 12, 13, 14)
+    private val LOADABLE_WEIGHT_TYPES = setOf(0, 1, 2, 3, 7, 8, 9, 10, 11, 12, 13, 14)
 
-    // ggml_type id -> (block size, bytes per block)
-    private val TYPE_SIZES = mapOf(
-        0 to (1 to 4),      // F32
-        1 to (1 to 2),      // F16
-        2 to (32 to 18),    // Q4_0
-        3 to (32 to 20),    // Q4_1
-        6 to (32 to 22),    // Q5_0
-        7 to (32 to 24),    // Q5_1
-        8 to (32 to 34),    // Q8_0
-        9 to (32 to 36),    // Q8_1
-        10 to (256 to 84),  // Q2_K
-        11 to (256 to 110), // Q3_K
-        12 to (256 to 144), // Q4_K
-        13 to (256 to 176), // Q5_K
-        14 to (256 to 210), // Q6_K
-        15 to (256 to 292), // Q8_K
-        30 to (1 to 2),     // BF16
-    )
+    private enum class TensorType(val id: Int, val blockSize: Int, val blockBytes: Int) {
+        F32(0, 1, 4), F16(1, 1, 2), BF16(30, 1, 2),
+        Q4_0(2, 32, 18), Q4_1(3, 32, 20), Q5_0(6, 32, 22), Q5_1(7, 32, 24), Q8_0(8, 32, 34), Q8_1(9, 32, 36),
+        Q2_K(10, 256, 84), Q3_K(11, 256, 110), Q4_K(12, 256, 144), Q5_K(13, 256, 176), Q6_K(14, 256, 210),
+        Q8_K(15, 256, 292);
 
-    /** Parses and sanity-checks the header from the first [HEADER_BYTES] of a file. */
+        companion object {
+            fun of(id: Int) = entries.firstOrNull { it.id == id }
+        }
+    }
+
     @Throws(InvalidModelException::class)
     fun parseHeader(bytes: ByteArray, length: Int = bytes.size): WhisperHeader {
         if (length < HEADER_BYTES) throw InvalidModelException("File too short for a model header")
@@ -112,20 +90,15 @@ object WhisperFile {
         require(h.nAudioState == h.nTextState && h.nAudioState in 64..4096, "width ${h.nAudioState}")
         require(h.nAudioHead in 1..64 && h.nTextHead in 1..64, "attention heads")
         require(h.nAudioLayer in 1..64 && h.nTextLayer in 1..64, "layer count")
-        require(h.ftype >= 0 && h.weightType in SUPPORTED_FTYPES, "weight type ${h.ftype}")
+        require(h.ftype >= 0 && h.weightType in LOADABLE_WEIGHT_TYPES, "weight type ${h.ftype}")
     }
 
-    /** Reads only the header of [file]. */
     @Throws(IOException::class)
     fun readHeader(file: File): WhisperHeader = file.inputStream().use { input ->
         val bytes = ByteArray(HEADER_BYTES)
         parseHeader(bytes, input.readFully(bytes))
     }
 
-    /**
-     * Checks the whole file structure: header, mel filters, vocabulary and every tensor record,
-     * which must end exactly at the end of the file.
-     */
     @Throws(IOException::class)
     fun validate(file: File): WhisperHeader {
         val total = file.length()
@@ -155,17 +128,16 @@ object WhisperFile {
                 val type = reader.int()
                 if (nDims !in 1..4) throw InvalidModelException("Bad tensor rank")
                 if (nameLength !in 1..MAX_TENSOR_NAME) throw InvalidModelException("Bad tensor name")
-                val (blockSize, blockBytes) = TYPE_SIZES[type]
-                    ?: throw InvalidModelException("Unsupported tensor type $type")
+                val tensorType = TensorType.of(type) ?: throw InvalidModelException("Unsupported tensor type $type")
                 var elements = 1L
                 repeat(nDims) {
                     val ne = reader.int()
                     if (ne !in 1..MAX_DIM) throw InvalidModelException("Bad tensor shape")
                     elements *= ne
                 }
-                if (elements % blockSize != 0L) throw InvalidModelException("Bad tensor shape")
+                if (elements % tensorType.blockSize != 0L) throw InvalidModelException("Bad tensor shape")
                 reader.skip(nameLength.toLong())
-                reader.skip(elements / blockSize * blockBytes)
+                reader.skip(elements / tensorType.blockSize * tensorType.blockBytes)
                 tensors++
             }
             if (tensors < MIN_TENSORS) throw InvalidModelException("Model has no weights")
@@ -175,8 +147,7 @@ object WhisperFile {
 
     private class Reader(private val raf: RandomAccessFile, private val total: Long) {
         private val scratch = ByteArray(4)
-        // Small buffered window: the vocabulary is tens of thousands of tiny records
-        private val buffer = ByteArray(64 * 1024)
+        private val buffer = ByteArray(READ_WINDOW_BYTES)
         private var bufferStart = 0L
         private var bufferLength = 0
         var position = 0L
@@ -218,7 +189,6 @@ object WhisperFile {
     }
 }
 
-/** Reads until [dst] is full or the stream ends; returns the number of bytes read. */
 internal fun InputStream.readFully(dst: ByteArray): Int {
     var done = 0
     while (done < dst.size) {

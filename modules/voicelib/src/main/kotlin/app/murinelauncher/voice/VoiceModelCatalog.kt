@@ -1,34 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 package app.murinelauncher.voice
 
-/**
- * A speech model published by FUTO for its voice input: OpenAI Whisper fine-tuned with FUTO's ACFT
- * method (dynamic audio context), converted to whisper.cpp GGML with Q8_0 weights.
- *
- * Murine never ships or mirrors these files: the user downloads them from FUTO's own server and
- * imports them. The source checkpoints are published by FUTO under Apache-2.0
- * (huggingface.co/futo-org/acft-whisper-*), fine-tuned from OpenAI Whisper (MIT).
- */
 data class CatalogModel(
-    /** Stable id, also the installed file name (without extension). */
     val id: String,
     val size: ModelSize,
     val multilingual: Boolean,
-    /** Official download link from FUTO's model page (keyboard.futo.tech/voice-input-models). */
-    val url: String,
+    val downloadUrl: String,
     val bytes: Long,
     val sha256: String,
-    /**
-     * Approximate extra memory while loaded and transcribing, from whisper.cpp measurements
-     * (tiny ~70 MB, base ~120 MB, small ~340 MB peak), rounded up.
-     */
     val approxRamMb: Int,
 ) {
     val fileName: String get() = "$id.bin"
 }
 
 object VoiceModelCatalog {
-    /** Where the user can read about the models and their terms. */
     const val MODELS_PAGE = "https://keyboard.futo.tech/voice-input-models"
     const val LICENSE_PAGE = "https://huggingface.co/futo-org/acft-whisper-base"
 
@@ -61,7 +46,6 @@ object VoiceModelCatalog {
         ),
     )
 
-    /** The default suggestion: accurate enough for app names, fast on mid-range phones. */
     val recommended: CatalogModel get() = models[1]
 
     fun byId(id: String): CatalogModel? = models.firstOrNull { it.id == id }

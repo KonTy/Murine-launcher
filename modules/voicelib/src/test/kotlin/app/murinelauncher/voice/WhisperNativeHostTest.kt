@@ -11,14 +11,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 
-/**
- * Desktop smoke test of the real JNI library and a real model. Skipped unless pointed at a host
- * build of libmurine_whisper (src/main/cpp builds on Linux too), a model and a 16 kHz mono WAV:
- *
- *   MURINE_WHISPER_LIBRARY=/path/libmurine_whisper.so MURINE_WHISPER_MODEL=/path/model.bin \
- *   MURINE_WHISPER_WAV=/path/speech.wav MURINE_WHISPER_EXPECT="some words" \
- *   gradle :voicelib:testDebugUnitTest --tests '*WhisperNativeHostTest*'
- */
 class WhisperNativeHostTest {
 
     private val library = System.getenv("MURINE_WHISPER_LIBRARY")
@@ -26,8 +18,9 @@ class WhisperNativeHostTest {
     private val wav = System.getenv("MURINE_WHISPER_WAV")?.let(::File)
 
     private fun assumeConfigured() {
-        assumeTrue("Native smoke test not configured", library != null && model != null && wav != null)
-        System.setProperty(WhisperNative.LIBRARY_PATH_PROPERTY, library!!)
+        assumeTrue("Set MURINE_WHISPER_LIBRARY, MURINE_WHISPER_MODEL and MURINE_WHISPER_WAV to run",
+            library != null && model != null && wav != null)
+        System.setProperty(WhisperNative.HOST_LIBRARY_PATH_PROPERTY, library!!)
     }
 
     @Test
@@ -50,7 +43,7 @@ class WhisperNativeHostTest {
         val t2 = System.nanoTime()
         val rssPeak = hwmKb()
         engine.close()
-        engine.close() // second close is a no-op
+        engine.close()
         val rssAfter = rssKb()
 
         val text = TranscriptCleaner.clean(raw.orEmpty())
@@ -74,7 +67,6 @@ class WhisperNativeHostTest {
         engine.abort()
         assertNull(engine.transcribe(FloatArray(32_000), 32_000))
         engine.close()
-        // Using a closed engine is harmless
         assertNull(engine.transcribe(FloatArray(32_000), 32_000))
         engine.abort()
     }
@@ -93,7 +85,6 @@ class WhisperNativeHostTest {
         val result = engine.transcribe(pcm, pcm.size)
         val elapsed = (System.nanoTime() - t0) / 1_000_000
         aborter.join()
-        // Closing from another thread mid-run is deferred, never a double free
         engine.close()
         println("aborted after ${elapsed}ms, result=$result")
         assertNull(result)
@@ -111,15 +102,15 @@ class WhisperNativeHostTest {
             rssKb()
         }
         println("rss after each query (MB): ${rss.map { it / 1024 }}")
-        // Allocator caches settle after the first rounds; a leak would add a model's worth each time
-        assertTrue("RSS grew: $rss", rss.last() - rss[1] < 16 * 1024)
+        val afterWarmUp = rss[1]
+        assertTrue("RSS grew: $rss", rss.last() - afterWarmUp < 16 * 1024)
     }
 
     private fun readWav(file: File): FloatArray = RandomAccessFile(file, "r").use { raf ->
         val bytes = ByteArray(raf.length().toInt()).also { raf.readFully(it) }
         val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-        // Find the "data" chunk
-        var pos = 12
+        val riffHeaderBytes = 12
+        var pos = riffHeaderBytes
         while (pos + 8 <= bytes.size) {
             val id = String(bytes, pos, 4, Charsets.US_ASCII)
             val size = buf.getInt(pos + 4)

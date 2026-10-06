@@ -44,7 +44,6 @@ public class LauncherConstants {
         public static final int REQUEST_RECONFIGURE_APPWIDGET = 13;
         public static final int REQUEST_HOME_ROLE = 14;
         public static final int REQUEST_SYSTEM_VOICE_SEARCH = 775_738_753;
-        // Permission request codes must fit in 16 bits for FragmentActivity
         public static final int REQUEST_RECORD_AUDIO = 30_651;
         static final int REQUEST_CREATE_SHORTCUT = 1;
         static final int REQUEST_CREATE_APPWIDGET = 5;

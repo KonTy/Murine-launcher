@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: Apache-2.0
-//
-// Thin JNI bridge to whisper.cpp: open a model file, transcribe one buffer of 16 kHz mono float PCM,
-// abort from another thread, free. Everything else (audio, threading policy, model management)
-// lives on the Kotlin side.
 
 #include <jni.h>
 
@@ -24,12 +20,10 @@ constexpr const char *kTag = "MurineWhisper";
 
 struct Session {
     whisper_context *ctx = nullptr;
-    // Set from any thread; polled by ggml between graph nodes and by the decoder loop
-    std::atomic<bool> abort{false};
+    std::atomic<bool> abortRequested{false};
 };
 
-// Library warnings and errors only. whisper.cpp never logs audio or transcripts at these levels.
-void logCallback(ggml_log_level level, const char *text, void *) {
+void logWarningsAndErrors(ggml_log_level level, const char *text, void *) {
     if (level != GGML_LOG_LEVEL_WARN && level != GGML_LOG_LEVEL_ERROR) return;
 #ifdef __ANDROID__
     __android_log_write(level == GGML_LOG_LEVEL_ERROR ? ANDROID_LOG_ERROR : ANDROID_LOG_WARN, kTag, text);
@@ -39,17 +33,17 @@ void logCallback(ggml_log_level level, const char *text, void *) {
 }
 
 bool abortCallback(void *data) {
-    return static_cast<Session *>(data)->abort.load(std::memory_order_relaxed);
+    return static_cast<Session *>(data)->abortRequested.load(std::memory_order_relaxed);
 }
 
 Session *toSession(jlong handle) {
     return reinterpret_cast<Session *>(static_cast<intptr_t>(handle));
 }
 
-}  // namespace
+}
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *, void *) {
-    whisper_log_set(logCallback, nullptr);
+    whisper_log_set(logWarningsAndErrors, nullptr);
     return JNI_VERSION_1_6;
 }
 
@@ -79,10 +73,7 @@ Java_app_murinelauncher_voice_WhisperNative_nativeOpen(JNIEnv *env, jclass, jstr
     return static_cast<jlong>(reinterpret_cast<intptr_t>(session));
 }
 
-/**
- * Transcribes [count] samples. Returns the UTF-8 bytes of the text (decoded on the Java side, as
- * token pieces are not guaranteed to be valid modified UTF-8), or null on abort or failure.
- */
+// Raw UTF-8 bytes: token pieces are not always valid modified UTF-8 for NewStringUTF
 extern "C" JNIEXPORT jbyteArray JNICALL
 Java_app_murinelauncher_voice_WhisperNative_nativeTranscribe(
         JNIEnv *env, jclass, jlong handle, jfloatArray samples, jint count, jstring jlanguage,
@@ -90,7 +81,7 @@ Java_app_murinelauncher_voice_WhisperNative_nativeTranscribe(
     Session *session = toSession(handle);
     if (session == nullptr || session->ctx == nullptr || samples == nullptr) return nullptr;
     if (count <= 0 || count > env->GetArrayLength(samples)) return nullptr;
-    if (session->abort.load()) return nullptr;
+    if (session->abortRequested.load()) return nullptr;
 
     std::string language = "auto";
     if (jlanguage != nullptr) {
@@ -120,7 +111,6 @@ Java_app_murinelauncher_voice_WhisperNative_nativeTranscribe(
         params.print_timestamps = false;
         params.suppress_blank = true;
         params.suppress_nst = true;
-        // One greedy pass: no temperature fallback re-decoding, which bounds the latency
         params.temperature = 0.0f;
         params.temperature_inc = 0.0f;
         params.greedy.best_of = 1;
@@ -129,7 +119,7 @@ Java_app_murinelauncher_voice_WhisperNative_nativeTranscribe(
         params.abort_callback = abortCallback;
         params.abort_callback_user_data = session;
 
-        if (whisper_full(session->ctx, params, pcm.data(), count) == 0 && !session->abort.load()) {
+        if (whisper_full(session->ctx, params, pcm.data(), count) == 0 && !session->abortRequested.load()) {
             const int segments = whisper_full_n_segments(session->ctx);
             for (int i = 0; i < segments; ++i) {
                 const char *segment = whisper_full_get_segment_text(session->ctx, i);
@@ -152,7 +142,7 @@ Java_app_murinelauncher_voice_WhisperNative_nativeTranscribe(
 extern "C" JNIEXPORT void JNICALL
 Java_app_murinelauncher_voice_WhisperNative_nativeAbort(JNIEnv *, jclass, jlong handle) {
     Session *session = toSession(handle);
-    if (session != nullptr) session->abort.store(true);
+    if (session != nullptr) session->abortRequested.store(true);
 }
 
 extern "C" JNIEXPORT void JNICALL

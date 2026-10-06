@@ -95,7 +95,6 @@ class MurineSearchBarView @JvmOverloads constructor(
 
     private fun openVoiceSearch() {
         if (SearchBarConfig.SEARCH_MICBUTTON_VOICE_SEARCH) {
-            // Offline transcription, or the system recognizer if the user chose it in settings
             VoiceSearch.onMicTapped(ActivityContext.lookupContext(context))
         } else {
             openAssistant()

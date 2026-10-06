@@ -35,8 +35,7 @@ class VoiceRecognizerTest {
         h.awaitCleanup()
         val engine = h.engine!!
         assertEquals(1, engine.transcribeCalls.get())
-        // Trimmed around the speech, padded to whisper.cpp's 1 s minimum
-        assertTrue(engine.lastCount in 17_600..32_000)
+        assertTrue("trimmed to the speech, padded to whisper.cpp's minimum", engine.lastCount in 17_600..32_000)
         assertEquals(1, engine.closeCalls.get())
         assertTrue(h.source!!.closed.get())
         assertFalse(h.recognizer.isActive)
@@ -69,9 +68,8 @@ class VoiceRecognizerTest {
         h.listener.await()
         assertEquals(Failure.NO_SPEECH, h.listener.failure)
         h.awaitCleanup()
-        // The model was loaded concurrently with listening; it must be freed all the same
         assertEquals(0, h.engine!!.transcribeCalls.get())
-        assertEquals(1, h.engine.closeCalls.get())
+        assertEquals("model loaded while listening is freed", 1, h.engine.closeCalls.get())
     }
 
     @Test
@@ -122,15 +120,15 @@ class VoiceRecognizerTest {
 
     @Test
     fun modelLoadFailureStopsListeningEarly() {
-        // A live microphone that never goes quiet: only the load failure can end the query
-        val h = harness(RecognizerHarness(source = FakeAudioSource(speech(1000)),
+        val micThatNeverGoesQuiet = FakeAudioSource(speech(1000))
+        val h = harness(RecognizerHarness(source = micThatNeverGoesQuiet,
             engine = null, openFailure = IOException("bad model")))
         h.recognizer.start()
         h.listener.await()
         assertEquals(Failure.MODEL_FAILED, h.listener.failure)
         h.awaitCleanup()
-        // Either the microphone was never opened, or it was closed again
-        assertTrue(h.sourcesCreated.get() == 0 || h.source!!.closed.get())
+        assertTrue("microphone never opened, or closed again",
+            h.sourcesCreated.get() == 0 || h.source!!.closed.get())
     }
 
     @Test
@@ -169,7 +167,6 @@ class VoiceRecognizerTest {
 
     @Test
     fun userStopTranscribesRightAway() {
-        // Speech, then a microphone that stays open: only the tap ends listening
         val h = harness(RecognizerHarness(source = FakeAudioSource(speech(800))))
         h.recognizer.start()
         waitUntil { h.source!!.framesRead >= 40 }

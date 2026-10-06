@@ -931,7 +931,6 @@ public class Launcher extends StatefulActivity<LauncherState>
         mPendingActivityResult = null;
 
         if (requestCode == REQUEST_SYSTEM_VOICE_SEARCH) {
-            // Into the search box, like offline voice search; the web only on explicit submit
             if (resultCode == RESULT_OK) VoiceSearch.onSystemRecognizerResult(this, data);
             return;
         }
@@ -1384,7 +1383,6 @@ public class Launcher extends StatefulActivity<LauncherState>
     protected void onPause() {
         // Ensure that items added to Launcher are queued until Launcher returns
         ItemInstallQueue.INSTANCE.get(this).pauseModelPush(FLAG_ACTIVITY_PAUSED);
-        // Never keep the microphone or a speech model busy behind another app
         MurineSearchBoxView.cancelVoiceInput(this);
 
         super.onPause();

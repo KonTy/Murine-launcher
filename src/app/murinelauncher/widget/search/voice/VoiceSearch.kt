@@ -39,13 +39,6 @@ import java.io.File
 import java.util.concurrent.Executor
 import kotlinx.coroutines.asCoroutineDispatcher
 
-/**
- * Glue between the search UI and the on-device recognizer: what the microphone does, the
- * microphone permission, and where speech models live.
- *
- * Nothing here runs in the background: a recognizer exists only while the search box listens or
- * transcribes, and loads its model on demand.
- */
 object VoiceSearch {
     private const val TAG = "MurineVoiceSearch"
     private const val MODELS_DIR = "voice_models"
@@ -55,22 +48,18 @@ object VoiceSearch {
         Executor(Handler(Looper.getMainLooper())::post).asCoroutineDispatcher()
     }
 
-    /** Models live in the no-backup directory: never in device backups nor in Murine's own. */
     @JvmStatic
     fun store(context: Context) = VoiceModelStore(File(context.noBackupFilesDir, MODELS_DIR))
 
-    /** The model voice search uses: the chosen one if still installed, else the first installed. */
     @JvmStatic
     fun activeModel(context: Context, installed: List<InstalledModel> = store(context).installed()): InstalledModel? {
         val chosen = LauncherPrefs.VOICE_SEARCH_MODEL.get(context)
         return installed.firstOrNull { it.id == chosen } ?: installed.firstOrNull()
     }
 
-    /** Whether this APK has a speech library for the device's CPU (not on 32-bit x86, for one). */
     @JvmStatic
     val isOfflineSupported: Boolean by lazy { VoiceAbis.isSupported(Build.SUPPORTED_ABIS) }
 
-    /** The microphone's behaviour: the system recognizer where offline is unsupported. */
     @JvmStatic
     fun mode(context: Context): VoiceSearchMode =
         if (isOfflineSupported) LauncherPrefs.VOICE_SEARCH_MODE.get(context) else VoiceSearchMode.SYSTEM
@@ -82,7 +71,6 @@ object VoiceSearch {
     fun hasMicPermission(context: Context) =
         context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
-    /** A recognizer for one query; the model is resolved and loaded on its worker thread. */
     fun newRecognizer(context: Context, listener: VoiceRecognizer.Listener): VoiceRecognizer {
         val app = context.applicationContext
         return VoiceRecognizer(
@@ -96,15 +84,14 @@ object VoiceSearch {
 
     private fun engineFactory(context: Context) = SpeechEngineFactory {
         val model = activeModel(context) ?: throw ModelMissingException()
-        checkMemory(context, model)
+        ensureEnoughMemoryFor(context, model)
         val language = WhisperTuning.resolveLanguage(
             LauncherPrefs.VOICE_SEARCH_LANGUAGE.get(context), model.multilingual
         )
         WhisperModel.open(model.file, WhisperOptions(language, model.dynamicAudioContext))
     }
 
-    /** Refuses to load a model that would push the system into killing apps (or the launcher). */
-    private fun checkMemory(context: Context, model: InstalledModel) {
+    private fun ensureEnoughMemoryFor(context: Context, model: InstalledModel) {
         val am = context.getSystemService(ActivityManager::class.java) ?: return
         val info = ActivityManager.MemoryInfo().also(am::getMemoryInfo)
         val neededMb = model.catalog?.approxRamMb?.toLong() ?: (model.bytes * 13 / 10 / MB + 60)
@@ -113,7 +100,6 @@ object VoiceSearch {
         }
     }
 
-    /** The search bar's microphone. */
     @JvmStatic
     fun onMicTapped(launcher: Launcher) {
         when (mode(launcher)) {
@@ -132,9 +118,10 @@ object VoiceSearch {
             MurineSearchBoxView.showForVoice(launcher)
             return
         }
-        val asked = LauncherPrefs.VOICE_SEARCH_MIC_ASKED.get(launcher)
-        if (asked && !launcher.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
-            // Denied for good: only the system settings can grant it now
+        val askedBefore = LauncherPrefs.VOICE_SEARCH_MIC_ASKED.get(launcher)
+        val deniedForGood = askedBefore &&
+            !launcher.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)
+        if (deniedForGood) {
             AlertDialogSheet.show(launcher,
                 launcher.getString(R.string.voice_search_mic_blocked_title),
                 launcher.getString(R.string.voice_search_mic_blocked_message)) {
@@ -150,7 +137,6 @@ object VoiceSearch {
         }
     }
 
-    /** @return true if the result was for the microphone permission. */
     @JvmStatic
     fun onRequestPermissionsResult(launcher: Launcher, requestCode: Int, grantResults: IntArray): Boolean {
         if (requestCode != REQUEST_RECORD_AUDIO) return false
@@ -162,7 +148,6 @@ object VoiceSearch {
         return true
     }
 
-    /** The recognizer chosen in the system settings; only used when the user opted into it. */
     private fun startSystemRecognizer(launcher: Launcher) {
         try {
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -176,7 +161,6 @@ object VoiceSearch {
         }
     }
 
-    /** Text from the system recognizer goes to the search box, like the offline one's. */
     @JvmStatic
     fun onSystemRecognizerResult(launcher: Launcher, data: Intent?) {
         val query = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()

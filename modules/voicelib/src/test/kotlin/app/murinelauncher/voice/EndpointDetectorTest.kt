@@ -15,19 +15,18 @@ class EndpointDetectorTest {
     private val frame = EndpointDetector.FRAME_SAMPLES
     private val random = Random(42)
 
-    /** Noise at [dbfs] for [ms]. */
     private fun noise(ms: Int, dbfs: Double): List<ShortArray> = frames(ms) {
         val amplitude = 32768 * 10.0.pow(dbfs / 20) * 1.7
         (random.nextDouble(-1.0, 1.0) * amplitude)
     }
 
-    /** A voiced, syllable-like signal at roughly [dbfs], with short dips between syllables. */
     private fun speech(ms: Int, dbfs: Double = -20.0): List<ShortArray> {
         var t = 0
         return frames(ms) {
             t++
-            val syllable = (t / 3200) % 4 != 3 // ~150 ms dip every 800 ms
-            val amplitude = 32768 * 10.0.pow(dbfs / 20) * 1.41 * (if (syllable) 1.0 else 0.05)
+            val slotOf200Ms = t / 3200
+            val pauseBetweenSyllables = slotOf200Ms % 4 == 3
+            val amplitude = 32768 * 10.0.pow(dbfs / 20) * 1.41 * (if (pauseBetweenSyllables) 0.05 else 1.0)
             amplitude * sin(2 * PI * 180 * t / 16000.0) + random.nextDouble(-30.0, 30.0)
         }
     }
@@ -36,7 +35,6 @@ class EndpointDetectorTest {
         ShortArray(frame) { sample().coerceIn(-32768.0, 32767.0).toInt().toShort() }
     }
 
-    /** Feeds frames until a terminal result; returns it and the time it came at. */
     private fun run(detector: EndpointDetector, input: List<ShortArray>): Pair<Result, Int> {
         input.forEachIndexed { i, f ->
             val r = detector.feed(f)
@@ -50,8 +48,11 @@ class EndpointDetectorTest {
         val detector = EndpointDetector()
         val (result, at) = run(detector, noise(500, -65.0) + speech(1500) + noise(3000, -65.0))
         assertEquals(Result.END_OF_SPEECH, result)
-        // 500 ms lead + 1500 ms speech + 900 ms trailing silence, give or take a frame or two
-        assertTrue("ended at $at", at in 2850..3100)
+        val leadIn = 500
+        val speaking = 1500
+        val trailingSilence = 900
+        val expectedEnd = leadIn + speaking + trailingSilence
+        assertTrue("ended at $at", at in expectedEnd - 50..expectedEnd + 200)
         assertTrue(detector.onsetFrame in 24..27)
     }
 

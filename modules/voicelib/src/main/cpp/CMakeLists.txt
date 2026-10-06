@@ -1,20 +1,8 @@
-# Offline speech-to-text for the launcher's voice search.
-#
-# Builds whisper.cpp (git submodule at a pinned commit, MIT licensed) from source, together with a
-# thin JNI layer, into one self-contained shared library. Nothing is prebuilt.
-#
-# On arm64 a second copy is built for CPUs with the ARMv8.2 dot-product and FP16 extensions, which
-# speeds up the quantized matrix multiplications considerably. The Kotlin side picks one at runtime
-# from the CPU's hardware capabilities, so ARMv8.0 devices keep working.
-#
-# The file also builds on a desktop host (no Android toolchain) for the native smoke test.
-
 cmake_minimum_required(VERSION 3.22.1)
 project(murine_voice C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# The static whisper.cpp libraries end up inside a shared library
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if (NOT CMAKE_BUILD_TYPE)
@@ -26,8 +14,6 @@ if (NOT EXISTS ${WHISPER_DIR}/CMakeLists.txt)
     message(FATAL_ERROR "whisper.cpp sources missing at ${WHISPER_DIR}: run 'git submodule update --init'")
 endif ()
 
-# Shared by every whisper.cpp copy: static, CPU only, no OpenMP runtime to ship, and no tuning for
-# the build machine's CPU, which says nothing about the phone's.
 set(WHISPER_OPTIONS
         -DBUILD_SHARED_LIBS=OFF
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
@@ -49,12 +35,11 @@ set(WHISPER_OPTIONS
 )
 
 if (ANDROID AND ANDROID_ABI STREQUAL "x86_64")
-    # The x86_64 Android ABI guarantees SSE4.2 and POPCNT, nothing more
     list(APPEND WHISPER_OPTIONS
             -DGGML_SSE42=ON -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF
             -DGGML_BMI2=OFF -DGGML_AVX512=OFF -DGGML_AVX_VNNI=OFF)
 elseif (ANDROID AND ANDROID_ABI STREQUAL "armeabi-v7a")
-    # llamafile's kernels need FP16 NEON loads, which the armeabi-v7a baseline does not guarantee
+    # llamafile needs FP16 NEON loads, which armeabi-v7a does not guarantee
     list(APPEND WHISPER_OPTIONS -DGGML_LLAMAFILE=OFF)
 endif ()
 
@@ -63,7 +48,6 @@ foreach (opt ${WHISPER_OPTIONS})
     set(${CMAKE_MATCH_1} ${CMAKE_MATCH_2} CACHE BOOL "" FORCE)
 endforeach ()
 
-# ThinLTO (clang, so every NDK build) trims a few percent off the library
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(LTO_FLAG -flto=thin)
 endif ()
@@ -80,7 +64,7 @@ function(murine_voice_library target)
             -Wl,--exclude-libs,ALL
             -Wl,--as-needed
             "$<$<NOT:$<CONFIG:Debug>>:${LTO_FLAG};-O3>"
-            # 16 KB page alignment, required on 16 KB page size devices (Android 15+)
+            # 16 KB page alignment, required on 16 KB page size devices
             -Wl,-z,max-page-size=16384
             -Wl,-z,common-page-size=16384)
     if (ANDROID)
@@ -95,8 +79,7 @@ murine_voice_library(murine_whisper)
 target_link_libraries(murine_whisper PRIVATE whisper)
 
 if (ANDROID AND ANDROID_ABI STREQUAL "arm64-v8a")
-    # ggml picks its CPU kernels at compile time, so the ARMv8.2 copy needs its own build tree:
-    # build it as an external project with the same toolchain, then link a second JNI library.
+    # ggml picks its CPU kernels at compile time, so the dotprod copy needs its own build tree
     include(ExternalProject)
     set(DOTPROD_DIR ${CMAKE_CURRENT_BINARY_DIR}/whisper-dotprod)
     set(DOTPROD_LIBS

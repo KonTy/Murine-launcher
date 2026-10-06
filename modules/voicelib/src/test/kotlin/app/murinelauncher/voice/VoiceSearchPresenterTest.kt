@@ -60,7 +60,6 @@ class VoiceSearchPresenterTest {
             )
         }
 
-    /** Runs [block] on the presenter's main thread and waits for it. */
     private fun onMain(block: () -> Unit) = main.submit(block).get(10, TimeUnit.SECONDS)
 
     @Test

@@ -10,13 +10,10 @@ class WhisperTuningTest {
 
     @Test
     fun audioContextFollowsTheAudioForTunedModels() {
-        // 1 s of audio -> 50 positions + 1 s headroom, raised to the 3 s floor
-        assertEquals(150, WhisperTuning.audioContext(16_000, dynamic = true))
-        // 5 s -> 250 + 50
-        assertEquals(300, WhisperTuning.audioContext(80_000, dynamic = true))
+        assertEquals("1 s of audio, raised to 3 s", 150, WhisperTuning.audioContext(16_000, dynamic = true))
+        assertEquals("5 s of audio plus 1 s", 300, WhisperTuning.audioContext(80_000, dynamic = true))
         assertEquals(301, WhisperTuning.audioContext(80_001, dynamic = true))
-        // Never beyond Whisper's 30 s window
-        assertEquals(1500, WhisperTuning.audioContext(16_000 * 40, dynamic = true))
+        assertEquals("capped at 30 s", 1500, WhisperTuning.audioContext(16_000 * 40, dynamic = true))
     }
 
     @Test
@@ -26,19 +23,14 @@ class WhisperTuningTest {
 
     @Test
     fun threadsUsePerformanceCoresOnly() {
-        val khz = 1000L
-        // 4 big + 4 little
-        assertEquals(4, WhisperTuning.threadCount(8, List(4) { 2_400 * khz } + List(4) { 2_000 * khz }))
-        // 2 big + 6 little
-        assertEquals(2, WhisperTuning.threadCount(8, List(2) { 2_200 * khz } + List(6) { 1_800 * khz }))
-        // 1 prime + 4 big + 3 little
-        assertEquals(4, WhisperTuning.threadCount(8,
-            listOf(3_200 * khz) + List(4) { 2_800 * khz } + List(3) { 2_000 * khz }))
-        // Single cluster: half the cores
-        assertEquals(4, WhisperTuning.threadCount(8, List(8) { 1_800 * khz }))
-        assertEquals(2, WhisperTuning.threadCount(4, List(4) { 1_800 * khz }))
-        // Unreadable frequencies
-        assertEquals(3, WhisperTuning.threadCount(6, List(6) { 0L }))
+        fun cores(count: Int, mhz: Long) = List(count) { mhz * 1000 }
+        assertEquals("4 big + 4 little", 4, WhisperTuning.threadCount(8, cores(4, 2_400) + cores(4, 2_000)))
+        assertEquals("2 big + 6 little", 2, WhisperTuning.threadCount(8, cores(2, 2_200) + cores(6, 1_800)))
+        assertEquals("1 prime + 4 big + 3 little", 4,
+            WhisperTuning.threadCount(8, cores(1, 3_200) + cores(4, 2_800) + cores(3, 2_000)))
+        assertEquals("one cluster: half the cores", 4, WhisperTuning.threadCount(8, cores(8, 1_800)))
+        assertEquals("one cluster: half the cores", 2, WhisperTuning.threadCount(4, cores(4, 1_800)))
+        assertEquals("unreadable frequencies", 3, WhisperTuning.threadCount(6, List(6) { 0L }))
         assertEquals(1, WhisperTuning.threadCount(1, emptyList()))
         assertEquals(4, WhisperTuning.threadCount(16, emptyList()))
     }
@@ -54,10 +46,9 @@ class WhisperTuningTest {
         assertEquals("it", WhisperTuning.resolveLanguage(WhisperTuning.LANGUAGE_DEVICE, true, Locale.ITALY))
         assertEquals("de", WhisperTuning.resolveLanguage("de", true, Locale.ITALY))
         assertEquals("auto", WhisperTuning.resolveLanguage(WhisperTuning.LANGUAGE_AUTO, true, Locale.ITALY))
-        // Unsupported device language: detect
-        assertEquals("auto", WhisperTuning.resolveLanguage("", true, Locale.forLanguageTag("chr")))
-        // Unknown stored value: device language
-        assertEquals("it", WhisperTuning.resolveLanguage("xx", true, Locale.ITALY))
+        assertEquals("unsupported device language", "auto",
+            WhisperTuning.resolveLanguage("", true, Locale.forLanguageTag("chr")))
+        assertEquals("unknown stored language", "it", WhisperTuning.resolveLanguage("xx", true, Locale.ITALY))
     }
 
     @Test

@@ -159,7 +159,6 @@ public final class SettingsQsbFragment: AbstractSettingsFragment() {
 
     override fun onResume() {
         super.onResume()
-        // Back from the voice search page: the model or mode may have changed
         findPreference<Preference>(VOICE_SEARCH)?.summary = SettingsVoiceSearchFragment.summary(requireContext())
     }
 

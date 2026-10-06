@@ -35,7 +35,6 @@
                 android:textColor="?android:attr/textColorPrimary"
                 android:textColorHint="?android:attr/textColorSecondary" />
 
-            <!-- Offline voice input: level halo, progress while transcribing, and the button -->
             <FrameLayout
                 android:id="@+id/search_voice_container"
                 android:layout_width="40dp"

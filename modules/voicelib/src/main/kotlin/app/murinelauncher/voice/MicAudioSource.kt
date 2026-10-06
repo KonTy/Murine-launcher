@@ -12,11 +12,6 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
 
-/**
- * Microphone input through [AudioRecord], in memory only. Takes transient exclusive audio focus
- * while listening, so music pauses and comes back afterwards, and reports the input as interrupted
- * when focus is lost (a call) or the system silences it (another app took the microphone).
- */
 class MicAudioSource(context: Context) : AudioSource {
 
     private val appContext = context.applicationContext
@@ -60,7 +55,6 @@ class MicAudioSource(context: Context) : AudioSource {
     }
 
     override fun read(buffer: ShortArray, offset: Int, length: Int): Int {
-        // Not under the lock: read blocks until audio arrives or stop() is called
         val r = record ?: return -1
         if (stopped) return -1
         return try {
@@ -122,7 +116,6 @@ class MicAudioSource(context: Context) : AudioSource {
                 }
             }
             .build()
-        // Listening works without focus too; it only means other audio keeps playing
         manager.requestAudioFocus(request)
         focusRequest = request
     }
@@ -131,7 +124,8 @@ class MicAudioSource(context: Context) : AudioSource {
         private const val SAMPLE_RATE = WhisperTuning.SAMPLE_RATE
         private const val CHANNEL = AudioFormat.CHANNEL_IN_MONO
         private const val ENCODING = AudioFormat.ENCODING_PCM_16BIT
-        /** 200 ms of audio. */
-        private const val BUFFER_BYTES = SAMPLE_RATE * 2 / 5
+        private const val BYTES_PER_SAMPLE = 2
+        private const val BUFFER_MS = 200
+        private const val BUFFER_BYTES = SAMPLE_RATE * BYTES_PER_SAMPLE * BUFFER_MS / 1000
     }
 }

@@ -83,8 +83,7 @@ class VoiceModelStoreTest {
     fun truncatedDownloadIsCorrupt() {
         val bytes = TestModels.bytes()
         val partial = bytes.copyOf(bytes.size - 100)
-        // Size unknown to the source: caught by the structure check
-        assertEquals(ImportResult.Failed(ImportError.CORRUPT), import(partial, expected = -1))
+        assertEquals(ImportResult.Failed(ImportError.CORRUPT), import(partial, expected = UNKNOWN_SIZE))
         assertTrue(dir.listFiles()!!.isEmpty())
     }
 
@@ -100,8 +99,7 @@ class VoiceModelStoreTest {
         val bytes = TestModels.bytes()
         val small = VoiceModelStore(dir, maxBytes = 1000)
         assertEquals(ImportResult.Failed(ImportError.TOO_LARGE), import(bytes, small))
-        // Size not announced up front: stopped while copying
-        assertEquals(ImportResult.Failed(ImportError.TOO_LARGE), import(bytes, small, expected = -1))
+        assertEquals(ImportResult.Failed(ImportError.TOO_LARGE), import(bytes, small, expected = UNKNOWN_SIZE))
         assertTrue(leftovers().isEmpty())
     }
 
@@ -181,9 +179,13 @@ class VoiceModelStoreTest {
         VoiceModelCatalog.models.forEach {
             assertTrue(it.id, it.sha256.matches(Regex("[0-9a-f]{64}")))
             assertTrue(it.id, it.bytes in 1..VoiceModelStore.MAX_MODEL_BYTES)
-            assertTrue(it.id, it.url.startsWith("https://"))
+            assertTrue(it.id, it.downloadUrl.startsWith("https://"))
         }
         assertEquals(VoiceModelCatalog.models.size, VoiceModelCatalog.models.map { it.id }.toSet().size)
+    }
+
+    private companion object {
+        const val UNKNOWN_SIZE = -1L
     }
 
     private fun sha256(bytes: ByteArray) =
