@@ -102,6 +102,8 @@
     <string name="pref_qsb_provider_apps_only">Solo app</string>
     <string name="pref_qsb_enable_lens_title">Attiva Lens</string>
     <string name="pref_qsb_enable_lens_summary">Mostra il pulsante Google Lens nella ricerca rapida</string>
+    <string name="pref_qsb_hide_google_buttons_title">Nascondi i pulsanti Google</string>
+    <string name="pref_qsb_hide_google_buttons_summary">Rimuove i pulsanti dell\'assistente e di Google Lens; il microfono prende il posto dell\'assistente</string>
     <string name="pref_qsb_box_blur">Sfocatura pannello di ricerca</string>
     <string name="pref_qsb_box_blur_desc">Mostra effetto MICA nel pannello di ricerca</string>
     <string name="pref_qsb_bar_alpha">Opacità barra di ricerca</string>

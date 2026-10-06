@@ -102,6 +102,8 @@
     <string name="pref_qsb_provider_apps_only">Apps only</string>
     <string name="pref_qsb_enable_lens_title">Enable Lens</string>
     <string name="pref_qsb_enable_lens_summary">Show Google Lens button in quick search</string>
+    <string name="pref_qsb_hide_google_buttons_title">Hide Google buttons</string>
+    <string name="pref_qsb_hide_google_buttons_summary">Remove the assistant and Google Lens buttons; the microphone takes the assistant\'s place</string>
     <string name="pref_qsb_box_blur">Blur search bubble</string>
     <string name="pref_qsb_box_blur_desc">Show MICA effect for search bubble</string>
     <string name="pref_qsb_bar_alpha">Search bar alpha</string>

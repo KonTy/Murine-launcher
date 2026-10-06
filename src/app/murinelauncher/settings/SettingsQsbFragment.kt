@@ -24,6 +24,7 @@ public final class SettingsQsbFragment: AbstractSettingsFragment() {
     companion object {
         const val SHOW_SEARCH_BAR: String = "qsb_show_search_bar" // Master switch
         const val SHOW_LENS: String = "qsb_enable_lens"
+        const val HIDE_GOOGLE_BUTTONS: String = "qsb_hide_google_buttons"
         const val SEARCH_PROVIDER: String = "qsb_search_provider"
         const val SEARCH_PROVIDER_CUSTOM: String = "qsb_search_provider_custom"
         const val SEARCH_BUBBLE_BLUR: String = "qsb_box_blur"

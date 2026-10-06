@@ -45,6 +45,8 @@ class MurineSearchBarView @JvmOverloads constructor(
     private val barBg: View
     private val circleBg: View
 
+    private var googleButtonsHidden = false
+
     init {
         SearchProvider.load(context)
         clipChildren = false
@@ -66,6 +68,20 @@ class MurineSearchBarView @JvmOverloads constructor(
         setupClickListeners()
     }
 
+    private fun showGoogleButtonsOrMoveMicIntoTheirPlace() {
+        googleButtonsHidden = LauncherPrefs.QSB_HIDE_GOOGLE_BUTTONS.get(context)
+        val showLens = LauncherPrefs.QSB_SHOW_LENS.get(context) && !googleButtonsHidden
+        lensButton.visibility = if (showLens) View.VISIBLE else View.GONE
+        micButton.visibility = if (googleButtonsHidden) View.GONE else View.VISIBLE
+        if (googleButtonsHidden) {
+            assistantSearchButton.setImageResource(R.drawable.ic_qsb_murine_mic)
+            assistantSearchButton.contentDescription = context.getString(R.string.murine_voice_search_desc)
+        } else {
+            assistantSearchButton.setImageResource(R.drawable.ic_qsb_murine_assistant_search)
+            assistantSearchButton.contentDescription = context.getString(R.string.murine_search_button_desc)
+        }
+    }
+
     private fun updateHint() {
         searchHint.text = if (SearchProvider.current == SearchProvider.APPS_ONLY)
             context.getString(R.string.all_apps_search_bar_hint)
@@ -81,7 +97,7 @@ class MurineSearchBarView @JvmOverloads constructor(
         // Tapping the search plate or the circle search button opens search
         val searchClickListener = OnClickListener { openSearch() }
         searchPlate.setOnClickListener(searchClickListener)
-        assistantSearchButton.setOnClickListener { openAssistant() }
+        assistantSearchButton.setOnClickListener { if (googleButtonsHidden) openVoiceSearch() else openAssistant() }
         searchLogo.setOnClickListener(searchClickListener)
         searchHint.setOnClickListener(searchClickListener)
         micButton.setOnClickListener { openVoiceSearch() }
@@ -167,7 +183,7 @@ class MurineSearchBarView @JvmOverloads constructor(
     fun refreshProvider() {
         SearchProvider.load(context)
         searchLogo.setImageResource(SearchProvider.current.iconRes)
-        lensButton.visibility = if (LauncherPrefs.QSB_SHOW_LENS.get(context)) View.VISIBLE else View.GONE
+        showGoogleButtonsOrMoveMicIntoTheirPlace()
         updateHint()
         var alpha = LauncherPrefs.QSB_ALPHA.get(context) / 100f
         val alphaLayer1 = DECELERATE_OUTER.getInterpolation(alpha)
@@ -183,6 +199,7 @@ class MurineSearchBarView @JvmOverloads constructor(
         when (key) {
             LauncherPrefs.QSB_SEARCH_PROVIDER.sharedPrefKey,
             LauncherPrefs.QSB_SHOW_LENS.sharedPrefKey,
+            LauncherPrefs.QSB_HIDE_GOOGLE_BUTTONS.sharedPrefKey,
             LauncherPrefs.QSB_ALPHA.sharedPrefKey -> {
                 post { refreshProvider() }
             }
@@ -194,7 +211,8 @@ class MurineSearchBarView @JvmOverloads constructor(
         LauncherPrefs.get(context).addListener(
             prefListener,
             LauncherPrefs.QSB_SEARCH_PROVIDER,
-            LauncherPrefs.QSB_SHOW_LENS
+            LauncherPrefs.QSB_SHOW_LENS,
+            LauncherPrefs.QSB_HIDE_GOOGLE_BUTTONS
         )
     }
 
@@ -203,7 +221,8 @@ class MurineSearchBarView @JvmOverloads constructor(
         LauncherPrefs.get(context).removeListener(
             prefListener,
             LauncherPrefs.QSB_SEARCH_PROVIDER,
-            LauncherPrefs.QSB_SHOW_LENS
+            LauncherPrefs.QSB_SHOW_LENS,
+            LauncherPrefs.QSB_HIDE_GOOGLE_BUTTONS
         )
     }
 

@@ -424,6 +424,8 @@ constructor(@ApplicationContext private val encryptedContext: Context) {
         @JvmField
         val QSB_SHOW_LENS = backedUpItem(SettingsQsbFragment.SHOW_LENS, true)
         @JvmField
+        val QSB_HIDE_GOOGLE_BUTTONS = backedUpItem(SettingsQsbFragment.HIDE_GOOGLE_BUTTONS, false)
+        @JvmField
         val QSB_SEARCH_PROVIDER = backedUpItem(SettingsQsbFragment.SEARCH_PROVIDER, SearchProvider.DUCKDUCKGO, EncryptionType.ENCRYPTED)
         @JvmField
         val QSB_SEARCH_PROVIDER_CUSTOM = backedUpItem(SettingsQsbFragment.SEARCH_PROVIDER_CUSTOM, "", EncryptionType.ENCRYPTED)
